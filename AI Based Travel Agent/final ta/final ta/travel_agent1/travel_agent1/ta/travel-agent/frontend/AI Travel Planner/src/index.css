@@ -1,0 +1,88 @@
+/* ===== Paste your FULL :root variables here ===== */
+
+/* Example global usage */
+body {
+  margin: 0;
+  font-family: var(--ta-sans-serif);
+  background: var(--scheme-surface);
+  color: var(--scheme-on-surface);
+}
+
+/* Navbar */
+.navbar {
+  background: var(--scheme-primary);
+  color: var(--scheme-on-primary);
+  padding: var(--gap-20);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font: var(--adaptive-title-40-small);
+}
+
+.nav-links a {
+  margin-left: var(--gap-20);
+  text-decoration: none;
+  color: var(--scheme-on-primary);
+  font-weight: 600;
+}
+
+/* Hero */
+.hero {
+  padding: var(--gap-60);
+  text-align: center;
+  background: linear-gradient(135deg,#e9f7ff,#ffffff);
+}
+
+.hero h1 {
+  font: var(--adaptive-display-10-large);
+}
+
+.search-box {
+  margin-top: var(--gap-30);
+}
+
+.search-box input {
+  padding: 12px;
+  width: 280px;
+  border-radius: var(--radius-large);
+  border: 1px solid #ccc;
+}
+
+.search-box button {
+  margin-left: var(--gap-10);
+  padding: 12px 20px;
+  background: var(--scheme-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-large);
+  cursor: pointer;
+}
+
+/* Cards */
+.card-container {
+  display: flex;
+  gap: var(--gap-30);
+  padding: var(--gap-40);
+  justify-content: center;
+}
+
+.card {
+  width: 260px;
+  background: white;
+  border-radius: var(--radius-xlarge);
+  box-shadow: var(--shadow-medium);
+  overflow: hidden;
+}
+
+.card img {
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+}
+
+.card h3 {
+  padding: var(--gap-20);
+}
