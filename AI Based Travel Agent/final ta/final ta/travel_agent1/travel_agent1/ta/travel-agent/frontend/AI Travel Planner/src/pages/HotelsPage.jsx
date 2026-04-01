@@ -8,12 +8,24 @@ export default function HotelsPage() {
   const [loading, setLoading] = useState(false);
 
   const getHotels = async () => {
+    if (!city.trim()) {
+      alert("Please enter a city name.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await API.get(`/hotels?city=${encodeURIComponent(city)}`);
-      setHotels(Array.isArray(res.data) ? res.data : []);
-    } catch {
+      if (res.data?.error) {
+        alert(res.data.error);
+        setHotels([]);
+      } else {
+        setHotels(Array.isArray(res.data) ? res.data : []);
+      }
+    } catch (err) {
+      console.error(err);
       alert("Error fetching hotels");
+      setHotels([]);
     }
     setLoading(false);
   };
@@ -40,6 +52,9 @@ export default function HotelsPage() {
 
       {/* HOTEL RESULTS */}
       <div className="hotel-list">
+        {hotels.length === 0 && !loading && city.trim() && (
+          <p>No hotels found for this city. Check your Google API / billing settings if the search keeps returning no results.</p>
+        )}
         {hotels.map((h, i) => (
           <div
             className="hotel-card"

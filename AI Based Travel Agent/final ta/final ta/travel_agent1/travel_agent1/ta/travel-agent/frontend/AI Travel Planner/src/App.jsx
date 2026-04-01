@@ -12,6 +12,7 @@ import MainHome from "./pages/MainHome";
 export default function App() {
   const [language, setLanguage] = useState("English");
   const [chatItinerary, setChatItinerary] = useState("");
+  const [chatDailyPlans, setChatDailyPlans] = useState([]);
 
   return (
     <BrowserRouter>
@@ -20,6 +21,7 @@ export default function App() {
       <FloatingChatbot
         language={language}
         setChatItinerary={setChatItinerary}
+        setChatDailyPlans={setChatDailyPlans}
       />
 
       {/* NAVBAR */}
@@ -56,6 +58,7 @@ export default function App() {
             <ItineraryPage
               language={language}
               chatItinerary={chatItinerary}
+              chatDailyPlans={chatDailyPlans}
             />
           }
         />

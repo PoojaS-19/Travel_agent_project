@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from amadeus import Client, ResponseError
 from dotenv import load_dotenv
@@ -155,11 +156,21 @@ def get_flights(source: str, destination: str, departure: str, return_date: str)
 # ----------------------------- HOTELS -----------------------------
 @app.get("/hotels")
 def get_hotels(city: str):
+    if not city or not city.strip():
+        return {"error": "City query is required"}
+
     url = (
         f"https://maps.googleapis.com/maps/api/place/textsearch/json?"
         f"query=best+hotels+in+{city}&key={GOOGLE_API_KEY}"
     )
     r = requests.get(url).json()
+    status = r.get("status")
+
+    if status != "OK":
+        return {
+            "error": r.get("error_message", f"Google Places API returned {status}")
+        }
+
     return r.get("results", [])[:5]
 
 
@@ -423,7 +434,7 @@ Now generate the JSON for the user's inputs.
         return {"error": str(e)}
 
     
-# ----------------------------- chatbot (GEMINI) -----------------------------
+# ----------------------------- chatbot (GEMINI) - SMART VERSION -----------------------------
 @app.post("/chatbot")
 async def travel_chatbot(data: dict):
     lat = data.get("lat")
@@ -432,45 +443,205 @@ async def travel_chatbot(data: dict):
     try:
         user_question = data.get("question", "")
         language = data.get("language", "English")
+        history = data.get("history", [])  # conversation history
 
-
-        # prompt = f"""
-
-        # You are a helpful travel assistant.
-        # Answer user queries clearly and politely.
-        #Respond completely in {language}.
-        #Do not mix languages.
-        # Question: {user_question}
-        # """
+        # Build conversation context from history
+        history_text = ""
+        if history:
+            recent = history[-10:]  # last 10 messages
+            for msg in recent:
+                role = "User" if msg.get("sender") == "user" else "Myra"
+                history_text += f"{role}: {msg.get('text', '')}\n"
 
         prompt = f"""
-        You are a helpful travel assistant named Myra.
-        
-        Refuse to answer questions that are not related to travel, geography, culture, food, or local services.
-        
-        IMPORTANT LANGUAGE RULE:
-        Answer ONLY in {language}.
-        
-        User's Location:
-        Lat: {lat}
-        Lon: {lon}
-        (Use this to give context-aware answers like "near you", but do not explicitly mention coordinates unless asked).
-        
-        User Question: {user_question}
-        
-        Guidelines:
-        - If the user asks for a trip plan/itinerary, give a brief summary and suggest they use the "Generate Itinerary" feature for a full detailed plan.
-        - If the user asks about food, hotels, or places, provide specific recommendations.
-        - Keep answers concise, friendly, and formatted nicely (use bullet points if listing items).
-        - NOT use Markdown headings (#) or code blocks. Use simple formatting.
-        """
+You are an intelligent travel assistant named Myra. You are as smart and conversational as ChatGPT or Gemini.
 
+IMPORTANT LANGUAGE RULE:
+Respond ONLY in {language}. Do NOT mix languages.
+
+User's Location:
+Lat: {lat}
+Lon: {lon}
+(Use this for context-aware answers but do not show coordinates unless asked.)
+
+Conversation History:
+{history_text}
+
+User's Latest Message: {user_question}
+
+INSTRUCTIONS — Read carefully:
+
+1) INTENT DETECTION:
+   - If the user asks to CREATE/MAKE/PLAN a trip, itinerary, or travel plan (e.g., "plan a 3-day trip to Goa", "make me an itinerary for Paris"), set response_type to "plan".
+   - If the user asks for INFORMATION, recommendations, tips, facts about a place/food/culture/hotel, set response_type to "info".
+   - If the user is having casual conversation, greetings, follow-ups, or anything else travel-related, set response_type to "chat".
+   - If the question is NOT related to travel, geography, culture, food, or local services — politely refuse.
+
+2) OUTPUT FORMAT — Always respond with valid JSON only (no markdown code blocks):
+
+   For response_type "chat" or "info":
+   {{
+     "response_type": "chat" or "info",
+     "reply": "Your conversational reply here. Use bullet points (•) for lists. Keep it helpful and friendly."
+   }}
+
+   For response_type "plan":
+   {{
+     "response_type": "plan",
+     "reply": "Brief 2-3 sentence summary of the plan.",
+     "plan_data": {{
+       "destination": "City Name",
+       "days": 3,
+       "daily_plans": [
+         {{
+           "day": 1,
+           "date": "YYYY-MM-DD",
+           "activities": [
+             {{
+               "time": "09:00 AM",
+               "place_name": "Name of place",
+               "category": "Attraction",
+               "lat": 12.345,
+               "lon": 45.678,
+               "description": "2-3 sentences describing the activity.",
+               "cost": "₹200"
+             }}
+           ]
+         }}
+       ]
+     }}
+   }}
+
+   For "category", use one of: "Food", "Attraction", "Travel", "Relax", "Shopping", "History".
+   Include 6-9 activities per day covering morning to night.
+   Use real coordinates for lat/lon.
+   Include realistic costs.
+
+3) PERSONALITY:
+   - Be warm, helpful, knowledgeable.
+   - Remember context from conversation history.
+   - If the user previously mentioned preferences, remember them.
+   - Give specific actionable recommendations, not generic advice.
+   - Do NOT use Markdown headings (#) or code blocks.
+
+Now respond to the user's latest message as JSON:
+"""
 
         response = gemini_model.generate_content(prompt)
-        return {"reply": response.text}
+        raw = response.text.strip()
+
+        # Parse JSON response
+        import json
+        try:
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            parsed = json.loads(raw.strip())
+            return parsed
+        except Exception:
+            # Fallback: return as plain chat
+            return {"response_type": "chat", "reply": raw}
 
     except Exception as e:
         return {"error": str(e)}
+
+
+# ----------------------------- chatbot STREAM (SSE) -----------------------------
+@app.post("/chatbot-stream")
+async def travel_chatbot_stream(data: dict):
+    """Streaming version of chatbot using Server-Sent Events."""
+    lat = data.get("lat")
+    lon = data.get("lon")
+    user_question = data.get("question", "")
+    language = data.get("language", "English")
+    history = data.get("history", [])
+
+    # Build conversation context from history
+    history_text = ""
+    if history:
+        recent = history[-10:]
+        for msg in recent:
+            role = "User" if msg.get("sender") == "user" else "Myra"
+            history_text += f"{role}: {msg.get('text', '')}\n"
+
+    prompt = f"""
+You are an intelligent travel assistant named Myra. You are as smart and conversational as ChatGPT or Gemini.
+
+IMPORTANT LANGUAGE RULE:
+Respond ONLY in {language}. Do NOT mix languages.
+
+User's Location: Lat: {lat}, Lon: {lon}
+
+Conversation History:
+{history_text}
+
+User's Latest Message: {user_question}
+
+INSTRUCTIONS:
+First, on its own line, output EXACTLY one of these tags: [PLAN], [INFO], or [CHAT]
+- [PLAN] if the user wants you to create/make/plan a trip or itinerary
+- [INFO] if the user wants information or recommendations
+- [CHAT] for casual conversation
+
+Then respond naturally.
+
+If the tag is [PLAN], after your brief summary, output a line containing only "---JSON_START---", then output valid JSON in this exact format, then output a line containing only "---JSON_END---":
+{{
+  "destination": "City Name",
+  "days": 3,
+  "daily_plans": [
+    {{
+      "day": 1,
+      "date": "YYYY-MM-DD",
+      "activities": [
+        {{
+          "time": "09:00 AM",
+          "place_name": "Place Name",
+          "category": "Attraction",
+          "lat": 12.345,
+          "lon": 45.678,
+          "description": "2-3 sentences.",
+          "cost": "₹200"
+        }}
+      ]
+    }}
+  ]
+}}
+
+For "category", use: "Food", "Attraction", "Travel", "Relax", "Shopping", or "History".
+Include 6-9 activities per day. Use real coordinates. Include realistic costs.
+
+If the tag is [INFO] or [CHAT], just respond as a helpful travel assistant. Use bullet points (•) for lists.
+Do NOT use Markdown headings or code blocks.
+Be warm, friendly, and specific. Remember conversation context.
+If the question is not travel-related, politely refuse.
+"""
+
+    async def event_generator():
+        try:
+            response = gemini_model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if hasattr(chunk, 'text') and chunk.text:
+                    # SSE format: data: <text>\n\n
+                    import json as _json
+                    yield f"data: {_json.dumps({'text': chunk.text})}\n\n"
+            yield f"data: {_json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 import sqlite3
 import uuid

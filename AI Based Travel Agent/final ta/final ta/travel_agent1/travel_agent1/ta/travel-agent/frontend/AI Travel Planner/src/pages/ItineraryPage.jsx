@@ -81,7 +81,7 @@ const renderActivityIcon = (category) => {
   );
 };
 
-export default function ItineraryPage({ language, chatItinerary }) {
+export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
 
   const [form, setForm] = useState({
     start_city: "",
@@ -101,6 +101,12 @@ export default function ItineraryPage({ language, chatItinerary }) {
       setResult(chatItinerary);
     }
   }, [chatItinerary]);
+
+  useEffect(() => {
+    if (chatDailyPlans && chatDailyPlans.length > 0) {
+      setDailyPlans(chatDailyPlans);
+    }
+  }, [chatDailyPlans]);
 
   const submit = async () => {
     setLoading(true);

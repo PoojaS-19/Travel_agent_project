@@ -1417,3 +1417,102 @@ body {
   border-radius: 4px;
   font-weight: 600;
 }
+
+/* Chatbot Plan Card */
+.chatbot-plan-card {
+  margin-top: 10px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.chatbot-plan-card h4 {
+  margin: 0 0 5px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.plan-days {
+  font-size: 12px;
+  background: #f0f4ff;
+  color: #0073de;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.mini-timeline {
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mini-day {
+  border-left: 2px solid #0073de;
+  padding-left: 10px;
+}
+
+.mini-day strong {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.mini-activities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini-activity {
+  font-size: 13px;
+  color: #666;
+}
+
+.mini-activity span {
+  font-weight: 600;
+  color: #333;
+}
+
+.mini-activity.more {
+  color: #888;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.view-full-plan-btn {
+  margin-top: 15px;
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #0073de 0%, #005bb5 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.view-full-plan-btn:hover {
+  background: linear-gradient(135deg, #005bb5 0%, #004494 100%);
+  transform: translateY(-2px);
+}
+
+/* Stop Button */
+.stop-btn {
+  background: #ff4757 !important; /* Red background */
+}
+
+.stop-btn:hover {
+  background: #ff6b81 !important;
+}
+
+.stop-icon {
+  font-size: 14px;
+  line-height: 1;
+}
