@@ -11,6 +11,10 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [coords, setCoords] = useState(null);
+  
+  // Speech Recognition State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
 
   const chatEndRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -20,14 +24,67 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /* ---------- Speech Recognition Setup ---------- */
+  useEffect(() => {
+    // Check if browser supports Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = language === "English" ? "en-US" : (language === "Hindi" ? "hi-IN" : "mr-IN");
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setQuestion((prev) => prev + " " + finalTranscript.trim());
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, [language]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Your browser does not support Speech Recognition. Try Chrome or Edge!");
+      return;
+    }
+    
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
   /* ---------- Detect location when chatbot opens ---------- */
   useEffect(() => {
     if (open) detectLocation();
   }, [open]);
 
   const detectLocation = () => {
+    // Default to Pune coordinates if location fails or is denied
+    const fallbackCoords = { lat: 18.5204, lon: 73.8567 };
+
     if (!navigator.geolocation) {
-      alert("Geolocation not supported");
+      setCoords(fallbackCoords);
       return;
     }
 
@@ -41,18 +98,18 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
         setCoords(loc);
       },
       (err) => {
-        console.log(err);
-        alert("Please allow location access for nearby results.");
+        console.log(err, "Falling back to default coords.");
+        setCoords(fallbackCoords);
       },
       { enableHighAccuracy: true }
     );
   };
 
   /* ---------- SEND MESSAGE (STREAMING) ---------- */
-  const sendMessage = async () => {
-    if (!question.trim() || loading) return;
+  const sendMessage = async (overrideText) => {
+    const userText = typeof overrideText === 'string' ? overrideText : question;
+    if (!userText.trim() || loading) return;
 
-    const userText = question;
     setQuestion("");
     
     // Add user message to state
@@ -86,9 +143,10 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
       let fullResponse = "";
       
       // Add empty bot message that we will stream into
-      setMessages(prev => [...prev, { sender: "bot", text: "", planData: null }]);
+      setMessages(prev => [...prev, { sender: "bot", text: "", planData: null, optionsData: null }]);
 
       let isPlan = false;
+      let isOptions = false;
       let buffer = "";
 
       while (true) {
@@ -116,13 +174,23 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   const newMsgs = [...prev];
                   const lastMsg = newMsgs[newMsgs.length - 1];
                   
+                  // Clean any system tags from the response
+                  let cleanText = fullResponse
+                    .replace(/\[CHAT\]/g, '')
+                    .replace(/\[INFO\]/g, '')
+                    .replace(/\[PLAN\]/g, '')
+                    .replace(/\[OPTIONS\]/g, '');
+
                   // If we see ---JSON_START---, it means the rest is JSON
-                  if (fullResponse.includes("---JSON_START---")) {
+                  if (cleanText.includes("---JSON_START---")) {
                     isPlan = true;
                     // Just show the text before JSON_START while streaming
-                    lastMsg.text = fullResponse.split("---JSON_START---")[0];
+                    lastMsg.text = cleanText.split("---JSON_START---")[0].trim();
+                  } else if (cleanText.includes("---OPTIONS_START---")) {
+                    isOptions = true;
+                    lastMsg.text = cleanText.split("---OPTIONS_START---")[0].trim();
                   } else {
-                    lastMsg.text = fullResponse;
+                    lastMsg.text = cleanText.trimStart();
                   }
                   
                   return newMsgs;
@@ -148,8 +216,27 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   } catch (e) {
                     console.error("Failed to parse plan JSON", e);
                   }
+                } else if (isOptions) {
+                  try {
+                    const jsonPart = fullResponse.split("---OPTIONS_START---")[1].split("---OPTIONS_END---")[0];
+                    const optionsData = JSON.parse(jsonPart.trim());
+                    
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1].optionsData = optionsData;
+                      return newMsgs;
+                    });
+                  } catch (e) {
+                    console.error("Failed to parse options JSON", e);
+                  }
                 } else {
-                  if (setChatItinerary) setChatItinerary(fullResponse);
+                  let finalClean = fullResponse
+                    .replace(/\[CHAT\]/g, '')
+                    .replace(/\[INFO\]/g, '')
+                    .replace(/\[PLAN\]/g, '')
+                    .replace(/\[OPTIONS\]/g, '')
+                    .trim();
+                  // We removed setChatItinerary(finalClean) here so standard chat messages don't bleed onto the main UI board.
                 }
               }
             } catch (e) {
@@ -349,6 +436,25 @@ return (
                     </button>
                   </div>
                 )}
+                
+                {/* Options Card (if available) */}
+                {m.optionsData && (
+                  <div className="chatbot-options-container">
+                    <h4>Select a Trip Option:</h4>
+                    {m.optionsData.map((opt, oi) => (
+                      <div key={oi} className="chatbot-option-card">
+                        <h5>{opt.title}</h5>
+                        <p className="opt-duration">{opt.duration}</p>
+                        <p>{opt.description}</p>
+                        <button 
+                          className="select-plan-btn"
+                          onClick={() => sendMessage(`I select option ${opt.id}: ${opt.title}`)}>
+                          Select this plan
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -365,22 +471,50 @@ return (
           <button onClick={fetchIncidentPlan}>🚨 Incident</button>
         </div>
 
+        <div className="quick-replies">
+          <button onClick={() => sendMessage("Beach")}>⛱️ Beach</button>
+          <button onClick={() => sendMessage("Hill")}>⛰️ Hill</button>
+          <button onClick={() => sendMessage("Adventure")}>🧗 Adventure</button>
+        </div>
+
         <div className="chat-input-area-adv">
           <input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask travel AI..."
+            placeholder={isListening ? "Listening..." : "Ask travel AI..."}
             onKeyDown={(e) => {
               if(e.key === "Enter" && !loading) sendMessage();
             }}
             disabled={loading}
           />
+          <button 
+            className={`mic-btn ${isListening ? 'listening_pulse' : ''}`} 
+            onClick={toggleListening}
+            title={isListening ? "Stop listening" : "Start Voice Input"}
+            style={{
+               background: isListening ? '#ef4444' : '#f1f5f9',
+               color: isListening ? '#fff' : '#64748b',
+               border: 'none',
+               borderRadius: '50%',
+               width: '36px',
+               height: '36px',
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               cursor: 'pointer',
+               marginRight: '8px',
+               transition: 'background 0.3s'
+            }}
+          >
+            🎤
+          </button>
+          
           {loading ? (
              <button className="send-btn-adv stop-btn" onClick={stopGeneration} title="Stop Generate">
                 <span className="stop-icon">⬛</span>
              </button>
           ) : (
-             <button className="send-btn-adv" onClick={sendMessage}>
+             <button className="send-btn-adv" onClick={() => sendMessage()}>
                ➤
              </button>
           )}

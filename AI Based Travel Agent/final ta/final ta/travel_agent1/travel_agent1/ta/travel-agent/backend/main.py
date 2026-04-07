@@ -184,6 +184,61 @@ def get_restaurants(city: str):
     r = requests.get(url).json()
     return r.get("results", [])[:5]
 
+
+# ----------------------------- PLACE IMAGE -----------------------------
+@app.get("/place-image")
+def get_place_image(place: str, index: int = 0):
+    """Fetch a single place photo by index (0, 1, 2...). Uses Google Places photo_reference."""
+    if not place:
+        return {"error": "Place required"}
+    
+    # 1. Search for the place to get photo_references
+    url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={place}&key={GOOGLE_API_KEY}"
+    r = requests.get(url).json()
+    
+    # Collect photos from the first result
+    photos = []
+    if r.get("status") == "OK" and r.get("results"):
+        for result in r["results"][:3]:  # Check up to 3 results for photos
+            for photo in result.get("photos", []):
+                photos.append(photo["photo_reference"])
+                if len(photos) >= 3:
+                    break
+            if len(photos) >= 3:
+                break
+    
+    if photos and index < len(photos):
+        photo_ref = photos[index]
+        # Fetch the actual photo at a larger width for full view
+        img_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference={photo_ref}&key={GOOGLE_API_KEY}"
+        img_resp = requests.get(img_url, stream=True)
+        return StreamingResponse(img_resp.iter_content(chunk_size=1024), media_type=img_resp.headers.get("Content-Type", "image/jpeg"))
+    
+    # Fallback if no photo found
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail="No image found")
+
+
+@app.get("/place-image-count")
+def get_place_image_count(place: str):
+    """Returns how many photos are available for a place (max 3)."""
+    if not place:
+        return {"count": 0}
+    
+    url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={place}&key={GOOGLE_API_KEY}"
+    r = requests.get(url).json()
+    
+    count = 0
+    if r.get("status") == "OK" and r.get("results"):
+        for result in r["results"][:3]:
+            count += len(result.get("photos", []))
+            if count >= 3:
+                count = 3
+                break
+    
+    return {"count": min(count, 3)}
+
+
 #------------------------------Nearby Places -----------------------------
 @app.post("/nearby")
 def nearby_places(data: dict):
@@ -315,6 +370,8 @@ Destination: {destination}
 
 If Starting City is different from Destination, include travel from Starting City to Destination on DAY 1 with realistic travel time and cost.
 
+CRITICAL REQUIREMENT: You MUST include meal times (Breakfast, Lunch, Dinner) under the "Food" category and hotel check-ins under the "Relax" category.
+For meals and hotel accommodations, DO NOT suggest a single direct place. Instead, provide 3 to 4 distinct options in the 'description' field based on different budgets, tastes, or facilities (e.g., "Option 1 (Budget): X... Option 2 (Luxury): Y..."). Set the 'place_name' to "Dining Options" or "Accommodation Options" respectively.
 
 IMPORTANT – Output MUST be valid JSON only. Do not wrap in markdown code blocks.
 The JSON structure must be exactly:
@@ -327,11 +384,12 @@ The JSON structure must be exactly:
       "activities": [
         {{
           "time": "09:00 AM",
-          "place_name": "Name of place",
+          "place_name": "Name of place, or 'Dining Options', or 'Accommodation Options'",
           "category": "Attraction",
           "lat": 12.345,
           "lon": 45.678,
-          "description": "2-3 sentences describing the activity.",
+          "description": "Detailed 4-6 sentence paragraph explaining the history, appeal, and what to do/see. Make it engaging. For food/hotel, list 3-4 options.",
+          "alternatives": ["Alternative Nearby Place 1", "Alternative Nearby Place 2"],
           "cost": "₹200"
         }}
       ]
@@ -499,11 +557,11 @@ INSTRUCTIONS — Read carefully:
            "activities": [
              {{
                "time": "09:00 AM",
-               "place_name": "Name of place",
+               "place_name": "Name of place, or 'Dining Options', or 'Accommodation Options'",
                "category": "Attraction",
                "lat": 12.345,
                "lon": 45.678,
-               "description": "2-3 sentences describing the activity.",
+               "description": "For typical places, 2-3 sentences. For eating or hotels, provide 3-4 options here based on budget/taste.",
                "cost": "₹200"
              }}
            ]
@@ -511,6 +569,8 @@ INSTRUCTIONS — Read carefully:
        ]
      }}
    }}
+
+   CRITICAL MAPPING RULE: Include meals (category: "Food") and hotels! For meals and hotels, provide 3 to 4 distinct options in the 'description' (e.g. Option 1 Budget, Option 2 Luxury). Set 'place_name' to "Dining Options" or "Accommodation Options".
 
    For "category", use one of: "Food", "Attraction", "Travel", "Relax", "Shopping", "History".
    Include 6-9 activities per day covering morning to night.
@@ -581,14 +641,22 @@ Conversation History:
 User's Latest Message: {user_question}
 
 INSTRUCTIONS:
-First, on its own line, output EXACTLY one of these tags: [PLAN], [INFO], or [CHAT]
-- [PLAN] if the user wants you to create/make/plan a trip or itinerary
-- [INFO] if the user wants information or recommendations
-- [CHAT] for casual conversation
+First, on its own line, output EXACTLY one of these tags: [PLAN], [OPTIONS], [INFO], or [CHAT]
+- [PLAN] if the user explicitly selected one of your previously given options OR provided enough detail that you are 100% sure what to build.
+- [OPTIONS] if the user wants to plan a trip, BUT hasn't decided on a specific destination mapping AND you already know their basic preferences (Starting City, Budget, Travel type, Transport, Interests).
+- [CHAT] for casual conversation, OR IF the user wants to plan a trip but you DO NOT yet know their Starting City, Budget, Travel type, Transport, and Interests. In this case, ask friendly follow-up questions to gather these details.
+IMPORTANT: DO NOT assume their Starting City from the "User's Location Lat/Lon" above. Always ask them for their starting city if they haven't explicitly mentioned one. Use their Lat/Lon only for "Near Me" info.
+- [INFO] if the user wants information or recommendations.
 
-Then respond naturally.
+If the tag is [OPTIONS], output a brief message, then on a new line "---OPTIONS_START---", then output valid JSON as a flat list, then "---OPTIONS_END---".
+Example:
+[
+  {{"id": 1, "title": "Beach Trip (Alibag + Kashid)", "description": "Relaxing coastal drive.", "duration": "5 Days"}},
+  {{"id": 2, "title": "Hill Station (Lonavala)", "description": "Chill in the mountains.", "duration": "5 Days"}},
+  {{"id": 3, "title": "Mixed Trip", "description": "A bit of everything.", "duration": "5 Days"}}
+]
 
-If the tag is [PLAN], after your brief summary, output a line containing only "---JSON_START---", then output valid JSON in this exact format, then output a line containing only "---JSON_END---":
+If the tag is [PLAN], after your brief summary, output a line containing only "---JSON_START---", then output valid JSON in this exact format, then "---JSON_END---":
 {{
   "destination": "City Name",
   "days": 3,
@@ -599,17 +667,20 @@ If the tag is [PLAN], after your brief summary, output a line containing only "-
       "activities": [
         {{
           "time": "09:00 AM",
-          "place_name": "Place Name",
+          "place_name": "Place Name, Dining Options, or Accommodation Options",
           "category": "Attraction",
           "lat": 12.345,
           "lon": 45.678,
-          "description": "2-3 sentences.",
+          "description": "Detailed 4-6 sentence paragraph explaining the history, appeal, and what to do/see. Make it engaging. For food/hotel, list 3-4 options.",
+          "alternatives": ["Alternative Nearby Place 1", "Alternative Nearby Place 2"],
           "cost": "₹200"
         }}
       ]
     }}
   ]
 }}
+
+CRITICAL REQUIREMENT: For "Food" (meals) and hotel accommodations, DO NOT give a single place. Instead, list 3-4 distinct options in the 'description' and set 'place_name' to "Dining Options" or "Accommodation Options".
 
 For "category", use: "Food", "Attraction", "Travel", "Relax", "Shopping", or "History".
 Include 6-9 activities per day. Use real coordinates. Include realistic costs.
