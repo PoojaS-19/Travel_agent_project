@@ -315,19 +315,140 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     alert("Copied!");
   };
 
-  const downloadPDF = () => {
+  // Build a Google Maps route URL for a day's activities
+  const buildGoogleMapsUrl = (activities) => {
+    const valid = activities.filter(a => a.lat && a.lon && !isNaN(a.lat) && !isNaN(a.lon));
+    if (valid.length === 0) return null;
+    if (valid.length === 1) {
+      return `https://www.google.com/maps/search/?api=1&query=${valid[0].lat},${valid[0].lon}`;
+    }
+    const origin = valid[0];
+    const dest   = valid[valid.length - 1];
+    const wps    = valid.slice(1, -1);
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${dest.lat},${dest.lon}&travelmode=driving`;
+    if (wps.length > 0) url += `&waypoints=${wps.map(p => `${p.lat},${p.lon}`).join('|')}`;
+    return url;
+  };
+
+  // Build an OpenStreetMap static image URL covering all points
+  const buildStaticMapImg = (activities, width = 800, height = 350) => {
+    const valid = activities.filter(a => a.lat && a.lon && !isNaN(a.lat) && !isNaN(a.lon));
+    if (valid.length === 0) return null;
+    const lats = valid.map(a => parseFloat(a.lat));
+    const lons = valid.map(a => parseFloat(a.lon));
+    const minLat = Math.min(...lats) - 0.02;
+    const maxLat = Math.max(...lats) + 0.02;
+    const minLon = Math.min(...lons) - 0.02;
+    const maxLon = Math.max(...lons) + 0.02;
+    const bbox   = `${minLon},${minLat},${maxLon},${maxLat}`;
+    // Use OpenStreetMap Static Map via a free proxy (geoapify) — fallback to a plain labelled banner
+    const markers = valid.map((a, i) => `lonlat:${a.lon},${a.lat};color:%23e74c3c;size:medium;text:${i+1}`).join('|');
+    // Use Geoapify free static maps (no key needed for low-res)
+    return `https://staticmap.openstreetmap.de/staticmap.php?bbox=${bbox}&size=${width}x${height}&maptype=mapnik&markers=${valid.map((a,i)=>`${a.lat},${a.lon},ol-marker-red`).join('|')}`;
+  };
+
+  const downloadPDF = async () => {
     const element = printRef.current;
     if (!element) return;
-    
+
+    // ── Step 1: Find all map containers and swap them for clickable static images ──
+    const mapContainers = element.querySelectorAll('.leaflet-container');
+    const restorations  = []; // [{parent, placeholder, original}]
+
+    // Gather all day activities for building per-day URLs
+    const allActivitiesForDays = dailyPlans;
+
+    mapContainers.forEach((mapEl, idx) => {
+      const parent = mapEl.parentElement;
+
+      // Figure out which activities belong to this map
+      // Master map (idx===0 when allDailyPlans) has all; day maps match by index
+      let activities = [];
+      let googleUrl  = "";
+      let label      = "";
+
+      if (idx === 0 && element.querySelector('.master-map-container')?.contains(mapEl)) {
+        // Master map: link to first day route as overview
+        activities = allActivitiesForDays.flatMap(d => d.activities);
+        label = "🗺️ View Full Trip on Google Maps";
+      } else {
+        // Per-day map — figure out which day by counting day-map-containers
+        const allDayMaps = [...element.querySelectorAll('.day-map-container .leaflet-container')];
+        const dayIdx     = allDayMaps.indexOf(mapEl);
+        if (dayIdx >= 0 && allActivitiesForDays[dayIdx]) {
+          activities = allActivitiesForDays[dayIdx].activities;
+          label = `📍 Open Day ${allActivitiesForDays[dayIdx].day} Route on Google Maps`;
+        } else {
+          activities = allActivitiesForDays.flatMap(d => d.activities);
+          label = "📍 Open Route on Google Maps";
+        }
+      }
+
+      googleUrl = buildGoogleMapsUrl(activities) || "https://maps.google.com";
+      const imgSrc = buildStaticMapImg(activities);
+
+      // Build placeholder: a clickable banner with the map image (or fallback div)
+      const placeholder = document.createElement('div');
+      placeholder.style.cssText = `
+        width: 100%;
+        background: #f0f4f8;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid #3b82f6;
+        margin-bottom: 15px;
+        font-family: Arial, sans-serif;
+      `;
+      placeholder.innerHTML = `
+        <a href="${googleUrl}" target="_blank" rel="noopener noreferrer"
+           style="display:block; text-decoration:none; color:inherit;">
+          ${
+            imgSrc
+              ? `<img src="${imgSrc}" alt="Map" crossorigin="anonymous"
+                      style="width:100%; height:300px; object-fit:cover; display:block;" />`
+              : `<div style="height:160px; background: linear-gradient(135deg,#1e3a5f,#3b82f6);
+                             display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">
+                   🗺️ Map Preview
+                 </div>`
+          }
+          <div style="
+            padding: 14px 20px;
+            background: #3b82f6;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+          ">
+            ${label} ↗
+          </div>
+        </a>
+      `;
+
+      parent.insertBefore(placeholder, mapEl);
+      parent.removeChild(mapEl);
+      restorations.push({ parent, placeholder, original: mapEl });
+    });
+
+    // ── Step 2: Generate PDF with links enabled ──
     const opt = {
-      margin:       10,
-      filename:     `${form.destination || 'trip'}-itinerary.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      margin:      10,
+      filename:    `${form.destination || 'trip'}-itinerary.pdf`,
+      image:       { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: false },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      enableLinks: true,
     };
 
-    html2pdf().set(opt).from(element).save();
+    await html2pdf().set(opt).from(element).save();
+
+    // ── Step 3: Restore original maps ──
+    restorations.forEach(({ parent, placeholder, original }) => {
+      parent.insertBefore(original, placeholder);
+      parent.removeChild(placeholder);
+    });
   };
 
   const handleAltClick = async (altName) => {
