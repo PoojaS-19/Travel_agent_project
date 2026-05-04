@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../api";
+import API, { API_BASE_URL } from "../api";
 import "../App.css";
 
 export default function FloatingChatbot({ language, setChatItinerary, setChatDailyPlans }) {
@@ -123,7 +123,7 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/chatbot-stream", {
+      const response = await fetch(`${API_BASE_URL}/chatbot-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -147,6 +147,7 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
       let isPlan = false;
       let isOptions = false;
+      let isEmergency = false;
       let buffer = "";
 
       while (true) {
@@ -179,7 +180,8 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                     .replace(/\[CHAT\]/g, '')
                     .replace(/\[INFO\]/g, '')
                     .replace(/\[PLAN\]/g, '')
-                    .replace(/\[OPTIONS\]/g, '');
+                    .replace(/\[OPTIONS\]/g, '')
+                    .replace(/\[EMERGENCY\]/g, '');
 
                   // If we see ---JSON_START---, it means the rest is JSON
                   if (cleanText.includes("---JSON_START---")) {
@@ -189,6 +191,9 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   } else if (cleanText.includes("---OPTIONS_START---")) {
                     isOptions = true;
                     lastMsg.text = cleanText.split("---OPTIONS_START---")[0].trim();
+                  } else if (cleanText.includes("---EMERGENCY_START---")) {
+                    isEmergency = true;
+                    lastMsg.text = cleanText.split("---EMERGENCY_START---")[0].trim();
                   } else {
                     lastMsg.text = cleanText.trimStart();
                   }
@@ -229,12 +234,26 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   } catch (e) {
                     console.error("Failed to parse options JSON", e);
                   }
+                } else if (isEmergency) {
+                  try {
+                    const jsonPart = fullResponse.split("---EMERGENCY_START---")[1].split("---EMERGENCY_END---")[0];
+                    const emergencyData = JSON.parse(jsonPart.trim());
+                    
+                    setMessages(prev => {
+                      const newMsgs = [...prev];
+                      newMsgs[newMsgs.length - 1].emergencyData = emergencyData;
+                      return newMsgs;
+                    });
+                  } catch (e) {
+                    console.error("Failed to parse emergency JSON", e);
+                  }
                 } else {
                   let finalClean = fullResponse
                     .replace(/\[CHAT\]/g, '')
                     .replace(/\[INFO\]/g, '')
                     .replace(/\[PLAN\]/g, '')
                     .replace(/\[OPTIONS\]/g, '')
+                    .replace(/\[EMERGENCY\]/g, '')
                     .trim();
                   // We removed setChatItinerary(finalClean) here so standard chat messages don't bleed onto the main UI board.
                 }
@@ -330,12 +349,19 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
         lon: coords.lon
       });
 
-      const h = res.data;
-
-      setMessages(prev => [...prev, {
-        sender: "bot",
-        text: `🚑 ${h.name}\nDistance: ${h.distance} km`
-      }]);
+      if (res.data.error) {
+         setMessages(prev => [...prev, { sender: "bot", text: res.data.error }]);
+      } else {
+         const hospitals = res.data.hospitals;
+         let text = "🏥 Nearest Hospitals:\n\n";
+         hospitals.forEach(h => {
+             text += `🚑 ${h.name}\n📏 Distance: ${h.distance} km\n📍 ${h.address}\n\n`;
+         });
+         setMessages(prev => [...prev, {
+           sender: "bot",
+           text: text.trim()
+         }]);
+      }
 
     } catch {
       setMessages(prev => [...prev, { sender: "bot", text: "Unable to find hospital." }]);
@@ -354,9 +380,29 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
   setMessages(prev => [...prev, { sender: "user", text: "I had an accident. Generate new itinerary." }]);
   setLoading(true);
 
+  let destination = "your destination";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].planData && messages[i].planData.destination) {
+      destination = messages[i].planData.destination;
+      break;
+    }
+  }
+
   try {
-    const res = await API.post("/incident-itinerary", coords);
-    setMessages(prev => [...prev, { sender: "bot", text: res.data.plan }]);
+    const res = await API.post("/incident-itinerary", { ...coords, destination });
+    const data = res.data;
+
+    if (data.daily_plans && data.daily_plans.length > 0) {
+       setMessages(prev => [...prev, { 
+           sender: "bot", 
+           text: data.itinerary_text || "Itinerary replanned.",
+           planData: { destination: destination, days: data.daily_plans.length, daily_plans: data.daily_plans } 
+       }]);
+       if (setChatItinerary) setChatItinerary(data.itinerary_text || "Itinerary replanned.");
+       if (setChatDailyPlans) setChatDailyPlans(data.daily_plans);
+    } else {
+       setMessages(prev => [...prev, { sender: "bot", text: data.itinerary_text || data.plan || "Unable to generate plan." }]);
+    }
   } catch {
     setMessages(prev => [...prev, { sender: "bot", text: "Unable to generate new itinerary." }]);
   }
@@ -453,6 +499,29 @@ return (
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+                
+                {/* Emergency Card (if available) */}
+                {m.emergencyData && (
+                  <div className="emergency-card">
+                    <h4>🚨 EMERGENCY DETECTED</h4>
+                    <p className="emergency-type">{m.emergencyData.emergency_type} Emergency</p>
+                    <p className="emergency-action">{m.emergencyData.recommended_action}</p>
+                    
+                    <div className="emergency-buttons">
+                      {m.emergencyData.numbers?.map((num, ni) => (
+                        <a key={ni} href={`tel:${num.split(' ')[0]}`} className="emergency-btn call-btn">
+                          📞 Call {num}
+                        </a>
+                      ))}
+                      <button className="emergency-btn hospital-btn" onClick={fetchEmergency}>
+                        🏥 Find Nearest Hospital
+                      </button>
+                      <button className="emergency-btn replan-btn" onClick={fetchIncidentPlan}>
+                        🔄 Re-plan Trip
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

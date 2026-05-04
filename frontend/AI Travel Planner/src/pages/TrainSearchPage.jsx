@@ -65,28 +65,22 @@ export default function TrainSearchPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [date, setDate] = useState("");
-  const [trains, setTrains] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState("");
 
-  const search = async () => {
-    setLoading(true);
+  const handleSearchClick = () => {
     setError("");
-    setTrains([]);
-    try {
-      // Pass from/to codes directly
-      const res = await API.get("/trains", {
-        params: { from_code: from, to_code: to, date },
-      });
-
-      const data = res.data;
-      const list = data.trains || data.data || [];
-      setTrains(list);
-    } catch (err) {
-      setError("Failed to fetch trains.");
-      console.error(err);
+    if (!from || !to || !date) {
+      setError("Please fill in all fields (From, To, and Date).");
+      return;
     }
-    setLoading(false);
+    setShowModal(true);
+  };
+
+  const handleContinue = () => {
+    localStorage.setItem("trainSearchData", JSON.stringify({ from, to, date }));
+    window.open("https://www.irctc.co.in/nget/train-search", "_blank");
+    setShowModal(false);
   };
 
   const getStationName = (code) => {
@@ -134,64 +128,45 @@ export default function TrainSearchPage() {
             />
           </div>
 
-          <button className="search-btn-enhanced" onClick={search} style={{ background: "linear-gradient(135deg, #ff5722 0%, #d84315 100%)", boxShadow: "0 8px 20px rgba(216, 67, 21, 0.3)" }}>
-            {loading ? "Searching..." : "Find Trains"}
+          <button className="search-btn-enhanced" onClick={handleSearchClick} style={{ background: "linear-gradient(135deg, #ff5722 0%, #d84315 100%)", boxShadow: "0 8px 20px rgba(216, 67, 21, 0.3)" }}>
+            Find Trains
           </button>
         </div>
       </div>
 
       {/* RESULTS SECTION */}
-      <div className="train-results-enhanced">
-        {error && <div className="error" style={{ textAlign: "center", width: "100%" }}>{error}</div>}
-
-        {trains.map((t, i) => (
-          <div className="train-card-enhanced" key={i}>
-            {/* Header */}
-            <div className="card-header-row">
-              <div className="airline-info">
-                <div className="train-icon-placeholder">
-                  🚆
-                </div>
-                <div>
-                  <div className="airline-name">{t.train_name}</div>
-                  <div style={{ fontSize: "14px", color: "#888" }}>#{t.train_no}</div>
-                </div>
-              </div>
-              <div className="train-price">
-                {t.price || "₹--"}
-              </div>
-            </div>
-
-            {/* Route Info */}
-            <div className="flight-route-row">
-              <div className="route-point">
-                <span className="route-time">{t.departure}</span>
-                <span className="route-city">{getStationName(t.from)}</span>
-              </div>
-
-              <div className="route-line">
-                <span className="duration-badge">{t.duration}</span>
-              </div>
-
-              <div className="route-point">
-                <span className="route-time">{t.arrival}</span>
-                <span className="route-city">{getStationName(t.to)}</span>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="train-meta">
-              <span>Class: SL, 3A, 2A, 1A</span>
-              <span style={{ color: "#4caf50", fontWeight: "bold" }}>Available</span>
-            </div>
-
-            <div className="flight-actions" style={{ marginTop: "20px" }}>
-              <button className="book-btn-small" style={{ backgroundColor: "#ff5722" }}>Book Ticket</button>
-            </div>
-
+      <div className="train-results-enhanced" style={{ maxWidth: "600px", margin: "0 auto" }}>
+        {error && (
+          <div className="error" style={{ 
+            textAlign: "center", 
+            width: "100%", 
+            padding: "15px", 
+            background: "rgba(255, 87, 34, 0.1)", 
+            color: "#d84315",
+            borderRadius: "8px", 
+            fontWeight: "bold",
+            border: "1px solid rgba(255, 87, 34, 0.3)",
+            marginTop: "20px"
+          }}>
+            {error}
           </div>
-        ))}
+        )}
       </div>
+
+      {/* CONFIRMATION MODAL */}
+      {showModal && (
+        <div className="irctc-modal-overlay">
+          <div className="irctc-modal">
+            <div className="irctc-modal-icon">🎫</div>
+            <h3>Secure Booking</h3>
+            <p>You will be redirected to IRCTC for secure booking.</p>
+            <div className="modal-actions">
+              <button className="cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="continue-btn" onClick={handleContinue}>Continue</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

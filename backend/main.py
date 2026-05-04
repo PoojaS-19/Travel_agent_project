@@ -7,7 +7,6 @@ import os
 import google.generativeai as genai
 import requests
 from pydantic import BaseModel
-from pydantic import BaseModel
 from datetime import datetime, timedelta
 import math
 
@@ -287,28 +286,55 @@ def emergency(data: dict):
     if not lat or not lon:
         return {"error": "Location not available"}
 
-    url = (
+    # 1. Fetch general hospitals
+    url_general = (
         "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         f"?location={lat},{lon}&rankby=distance&type=hospital"
         f"&key={GOOGLE_API_KEY}"
     )
+    res_general = requests.get(url_general).json()
 
-    res = requests.get(url).json()
+    # 2. Fetch explicitly private hospitals using keyword
+    url_private = (
+        "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        f"?location={lat},{lon}&rankby=distance&type=hospital&keyword=private"
+        f"&key={GOOGLE_API_KEY}"
+    )
+    res_private = requests.get(url_private).json()
 
-    if not res.get("results"):
+    # Combine results
+    all_results = res_general.get("results", []) + res_private.get("results", [])
+
+    if not all_results:
         return {"error": "No hospital found nearby"}
 
-    h = res["results"][0]
+    # Deduplicate by place_id
+    seen_place_ids = set()
+    unique_hospitals = []
+    
+    for h in all_results:
+        place_id = h.get("place_id", h["name"])
+        if place_id not in seen_place_ids:
+            seen_place_ids.add(place_id)
+            
+            # Calculate distance
+            dist = calculate_distance(
+                lat, lon,
+                h["geometry"]["location"]["lat"],
+                h["geometry"]["location"]["lng"]
+            )
+            
+            unique_hospitals.append({
+                "name": h["name"],
+                "address": h.get("vicinity", ""),
+                "distance": dist
+            })
 
-    return {
-        "name": h["name"],
-        "address": h.get("vicinity", ""),
-        "distance": calculate_distance(
-            lat, lon,
-            h["geometry"]["location"]["lat"],
-            h["geometry"]["location"]["lng"]
-        )
-    }
+    # Sort by distance
+    unique_hospitals.sort(key=lambda x: x["distance"])
+
+    # Return top 3
+    return {"hospitals": unique_hospitals[:3]}
 
 
 
@@ -530,6 +556,7 @@ User's Latest Message: {user_question}
 INSTRUCTIONS — Read carefully:
 
 1) INTENT DETECTION:
+   - If the user mentions an accident, emergency, medical issue, or urgently needs police/hospital help, set response_type to "emergency".
    - If the user asks to CREATE/MAKE/PLAN a trip, itinerary, or travel plan (e.g., "plan a 3-day trip to Goa", "make me an itinerary for Paris"), set response_type to "plan".
    - If the user asks for INFORMATION, recommendations, tips, facts about a place/food/culture/hotel, set response_type to "info".
    - If the user is having casual conversation, greetings, follow-ups, or anything else travel-related, set response_type to "chat".
@@ -541,6 +568,17 @@ INSTRUCTIONS — Read carefully:
    {{
      "response_type": "chat" or "info",
      "reply": "Your conversational reply here. Use bullet points (•) for lists. Keep it helpful and friendly."
+   }}
+
+   For response_type "emergency":
+   {{
+     "response_type": "emergency",
+     "reply": "Please stay calm. Your safety is our priority.",
+     "emergency_data": {{
+       "emergency_type": "Medical or Police",
+       "recommended_action": "Find help nearby.",
+       "numbers": ["108 (Ambulance)", "100 (Police)"]
+     }}
    }}
 
    For response_type "plan":
@@ -641,7 +679,8 @@ Conversation History:
 User's Latest Message: {user_question}
 
 INSTRUCTIONS:
-First, on its own line, output EXACTLY one of these tags: [PLAN], [OPTIONS], [INFO], or [CHAT]
+First, on its own line, output EXACTLY one of these tags: [EMERGENCY], [PLAN], [OPTIONS], [INFO], or [CHAT]
+- [EMERGENCY] if the user mentions an accident, emergency, medical issue, or urgently needs police/hospital help.
 - [PLAN] if the user explicitly selected one of your previously given options OR provided enough detail that you are 100% sure what to build.
 - [OPTIONS] if the user wants to plan a trip, BUT hasn't decided on a specific destination mapping AND you already know their basic preferences (Starting City, Budget, Travel type, Transport, Interests).
 - [CHAT] for casual conversation, OR IF the user wants to plan a trip but you DO NOT yet know their Starting City, Budget, Travel type, Transport, and Interests. In this case, ask friendly follow-up questions to gather these details.
@@ -678,6 +717,13 @@ If the tag is [PLAN], after your brief summary, output a line containing only "-
       ]
     }}
   ]
+}}
+
+If the tag is [EMERGENCY], output an empathetic message, then on a new line "---EMERGENCY_START---", then output valid JSON in this exact format, then "---EMERGENCY_END---":
+{{
+  "emergency_type": "Medical or Police",
+  "recommended_action": "Seek immediate assistance.",
+  "numbers": ["108 (Ambulance)", "100 (Police)"]
 }}
 
 CRITICAL REQUIREMENT: For "Food" (meals) and hotel accommodations, DO NOT give a single place. Instead, list 3-4 distinct options in the 'description' and set 'place_name' to "Dining Options" or "Accommodation Options".
@@ -862,12 +908,40 @@ def _call_provider_schedule(train_no: str):
             ],
         }
     try:
-        url = f"{TRAIN_API_URL}/train-schedule"
-        headers = {"x-api-key": TRAIN_API_KEY}
-        params = {"train": train_no}
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        url = f"{TRAIN_API_URL}/api/v1/train-details"
+        headers = {
+            "x-rapidapi-key": TRAIN_API_KEY,
+            "x-rapidapi-host": "irctc-insight.p.rapidapi.com",
+            "Content-Type": "application/json"
+        }
+        payload = {"trainNo": train_no}
+        
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        
+        route_list = []
+        if data.get("status") and data.get("data"):
+            api_route = data["data"].get("trainRoute", [])
+            for st in api_route:
+                route_list.append({
+                    "station": st.get("stationName", ""),
+                    "arr": st.get("arrives", "--"),
+                    "dep": st.get("departs", "--"),
+                })
+                
+        if not route_list:
+            return {
+                "train_no": train_no,
+                "route": [
+                    {"station": f"No schedule data found for train {train_no}", "arr": "--", "dep": "--"}
+                ],
+            }
+
+        return {
+            "train_no": train_no,
+            "route": route_list
+        }
     except Exception as e:
         return {"error": "provider_error", "message": str(e)}
 
@@ -930,6 +1004,29 @@ REMAINING_PLACES = [
 
 
 def nearest_hospital(lat, lon):
+    try:
+        url = (
+            "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+            f"?location={lat},{lon}&rankby=distance&type=hospital"
+            f"&key={GOOGLE_API_KEY}"
+        )
+        res = requests.get(url).json()
+
+        if res.get("results"):
+            h = res["results"][0]
+            return {
+                "name": h["name"],
+                "lat": h["geometry"]["location"]["lat"],
+                "lon": h["geometry"]["location"]["lng"],
+                "distance": calculate_distance(
+                    lat, lon,
+                    h["geometry"]["location"]["lat"],
+                    h["geometry"]["location"]["lng"]
+                )
+            }
+    except Exception as e:
+        pass
+
     return {
         "name": "City Care Hospital",
         "lat": lat + 0.01,
@@ -1025,14 +1122,17 @@ def get_demo_booking_endpoint(pnr: str):
 class IncidentRequest(BaseModel):
     lat: float
     lon: float
+    destination: Optional[str] = "your destination"
 
 
 @app.post("/incident-itinerary")
 def incident_itinerary(req: IncidentRequest):
     now = datetime.now()
     hospital = nearest_hospital(req.lat, req.lon)
+    if not hospital:
+        hospital = {"name": "Nearest Hospital", "distance": "unknown"}
 
-    plan = f"""
+    itinerary_text = f"""
 🚨 ACCIDENT OCCURRED – ITINERARY REPLANNED
 
 📍 Accident Location
@@ -1048,32 +1148,89 @@ Longitude: {req.lon}
 Rest & observation
 
 😴 Night – Full rest
-"""
-
-    next_day = now + timedelta(days=1)
-
-    plan += f"""
 
 📅 NEXT DAY – CONTINUE JOURNEY
-⏰ {next_day.strftime('%I:%M %p')}
-Starting from accident location
 """
-
-    # 🔁 LOOP REMAINING PLACES
-    for place in REMAINING_PLACES:
-        plan += f"""
-
-📍 Destination: {place['name']}
-🕒 Stay: {place['days']} day(s)
+    prompt = f"""
+Generate a brief 1-2 day travel itinerary for {req.destination} focusing on light, relaxing activities suitable for someone recovering from a minor accident. 
+Do not include intense physical activities. 
+IMPORTANT – Output MUST be valid JSON only. Do not wrap in markdown code blocks.
+The JSON structure must be exactly:
+{{
+  "itinerary_text": "Keep this short summary...",
+  "daily_plans": [
+    {{
+      "day": 1,
+      "date": "YYYY-MM-DD",
+      "activities": [
+        {{
+          "time": "09:00 AM",
+          "place_name": "Name of place, or 'Dining Options', or 'Accommodation Options'",
+          "category": "Relax",
+          "lat": 12.345,
+          "lon": 45.678,
+          "description": "Detailed 4-6 sentence paragraph explaining the history, appeal, and what to do/see. Make it engaging. For food/hotel, list 3-4 options.",
+          "alternatives": ["Alternative Nearby Place 1"],
+          "cost": "₹200"
+        }}
+      ]
+    }}
+  ]
+}}
 """
+    try:
+        response = gemini_model.generate_content(prompt)
+        raw = response.text.strip()
+        import json
+        if raw.startswith("```json"):
+            raw = raw[7:]
+        if raw.startswith("```"):
+            raw = raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+            
+        parsed = json.loads(raw.strip())
+        parsed["itinerary_text"] = itinerary_text + "\n" + parsed.get("itinerary_text", "")
+        return parsed
+    except Exception as e:
+        return {
+            "itinerary_text": itinerary_text + f"\n📍 Continue your relaxing journey in {req.destination}.",
+            "daily_plans": []
+        }
 
-        for spot in place["spots"]:
-            plan += f"• Visit {spot}\n"
+# ----------------------------- BUSES -----------------------------
+@app.get("/buses")
+def get_buses(source: str, destination: str, date: str):
+    print(f"Searching buses: {source} -> {destination} on {date}")
+    import random
+    from datetime import datetime, timedelta
 
-    plan += """
+    try:
+        base_date = datetime.strptime(date, "%Y-%m-%d")
+    except:
+        base_date = datetime.now()
 
-✅ Old itinerary cancelled
-✅ New itinerary generated for remaining places
-"""
+    mock_buses = []
+    operators = ["VRL Travels", "Orange Travels", "SRS Travels", "Kallada Travels", "Neeta Travels"]
+    
+    for _ in range(5):
+        dep_hour = random.randint(18, 23)
+        dep_min = random.choice([0, 15, 30, 45])
+        duration_hours = random.randint(6, 14)
+        
+        dep_dt = base_date.replace(hour=dep_hour, minute=dep_min)
+        arr_dt = dep_dt + timedelta(hours=duration_hours, minutes=random.randint(0, 59))
+        
+        price = random.randint(800, 2500)
+        seats = random.randint(4, 20)
 
-    return {"plan": plan.strip()}
+        mock_buses.append({
+            "name": random.choice(operators),
+            "departure": dep_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "arrival": arr_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "duration": f"{duration_hours}h {random.randint(0, 59)}m",
+            "price": price,
+            "seats_available": seats
+        })
+        
+    return mock_buses

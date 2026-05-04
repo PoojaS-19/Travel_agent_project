@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import API from "../api";
+import API, { API_BASE_URL } from "../api";
 import "../App.css";
 import MapComponent from "../components/MapComponent";
 import { CITIES } from "../data/cities";
@@ -94,7 +94,7 @@ function ImageCarousel({ placeName, destination }) {
   // Try to fetch image count on mount
   useEffect(() => {
     let cancelled = false;
-    fetch(`http://127.0.0.1:8000/place-image-count?place=${baseQuery}`)
+    fetch(`${API_BASE_URL}/place-image-count?place=${baseQuery}`)
       .then(res => res.json())
       .then(data => {
         if (!cancelled && data.count) {
@@ -170,7 +170,7 @@ function ImageCarousel({ placeName, destination }) {
 
   if (hidden) return null;
 
-  const currentSrc = `http://127.0.0.1:8000/place-image?place=${baseQuery}&index=${currentIndex}`;
+  const currentSrc = `${API_BASE_URL}/place-image?place=${baseQuery}&index=${currentIndex}`;
 
   // Lightbox rendered via portal so it escapes overflow:hidden parents
   const lightboxPortal = lightboxOpen ? createPortal(

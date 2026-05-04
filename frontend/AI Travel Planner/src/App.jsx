@@ -6,6 +6,7 @@ import FlightsPage from "./pages/FlightsPage";
 import FloatingChatbot from "./components/FloatingChatbot";
 import "./App.css";
 import TrainSearchPage from "./pages/TrainSearchPage";
+import BusSearchPage from "./pages/BusSearchPage";
 import { useState } from "react";
 import MainHome from "./pages/MainHome";
 
@@ -35,6 +36,7 @@ export default function App() {
           <Link to="/restaurants">Restaurants</Link>
           <Link to="/flights">Flights</Link>
           <Link to="/trainsearch">Train</Link>
+          <Link to="/bussearch">Bus</Link>
         </div>
 
         <select
@@ -81,6 +83,11 @@ export default function App() {
         <Route
           path="/trainsearch"
           element={<TrainSearchPage language={language} />}
+        />
+
+        <Route
+          path="/bussearch"
+          element={<BusSearchPage language={language} />}
         />
       </Routes>
     </BrowserRouter>
