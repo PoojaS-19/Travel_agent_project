@@ -1,19 +1,38 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useNavigate } from "react-router-dom";
 import ItineraryPage from "./pages/ItineraryPage";
 import HotelsPage from "./pages/HotelsPage";
 import RestaurantsPage from "./pages/RestaurantsPage";
 import FlightsPage from "./pages/FlightsPage";
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import FloatingChatbot from "./components/FloatingChatbot";
 import "./App.css";
 import TrainSearchPage from "./pages/TrainSearchPage";
 import BusSearchPage from "./pages/BusSearchPage";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainHome from "./pages/MainHome";
 
 export default function App() {
   const [language, setLanguage] = useState("English");
   const [chatItinerary, setChatItinerary] = useState("");
   const [chatDailyPlans, setChatDailyPlans] = useState([]);
+  const [user, setUser] = useState(null);
+
+  // Check for existing user session on app load
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const userData = localStorage.getItem("user");
+    if (token && userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    window.location.href = "/";
+  };
 
   return (
     <BrowserRouter>
@@ -37,6 +56,18 @@ export default function App() {
           <Link to="/flights">Flights</Link>
           <Link to="/trainsearch">Train</Link>
           <Link to="/bussearch">Bus</Link>
+
+          {user ? (
+            <>
+              <span className="user-info">Welcome, {user.username}!</span>
+              <button onClick={handleLogout} className="logout-btn">Logout</button>
+            </>
+          ) : (
+            <>
+              <Link to="/login">Login</Link>
+              <Link to="/signup">Sign Up</Link>
+            </>
+          )}
         </div>
 
         <select
@@ -53,6 +84,9 @@ export default function App() {
       {/* ROUTES */}
       <Routes>
         <Route path="/" element={<MainHome />} />
+
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
 
         <Route
           path="/itinerary"

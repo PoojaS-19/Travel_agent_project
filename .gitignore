@@ -154,3 +154,10 @@ node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+#preparation files
+INTERVIEW_*.md
+PROJECT_*.md
+QUICK_*.md
+README_START_HERE.md
+TECHNICAL_*.md

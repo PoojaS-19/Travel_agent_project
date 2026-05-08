@@ -271,6 +271,8 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   const [dailyPlans, setDailyPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [altModal, setAltModal] = useState({ isOpen: false, place: "", loading: false, text: "" });
+  const [savedItineraries, setSavedItineraries] = useState([]);
+  const [showSaved, setShowSaved] = useState(false);
   const printRef = useRef();
 
   useEffect(() => {
@@ -464,10 +466,65 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     }
   };
 
+  const fetchSavedItineraries = async () => {
+    try {
+      const res = await API.get("/itineraries");
+      setSavedItineraries(res.data.itineraries || []);
+      setShowSaved(true);
+    } catch (e) {
+      alert("Error loading saved itineraries. Please login first.");
+    }
+  };
+
+  const loadSavedItinerary = (itinerary) => {
+    setResult(itinerary.itinerary_text);
+    setDailyPlans(itinerary.daily_plans);
+    setShowSaved(false);
+  };
+
   return (
     <div className="itinerary-page">
 
       <h2 className="page-title">AI Travel Itinerary Planner</h2>
+
+      {/* SAVED ITINERARIES TOGGLE */}
+      <div className="saved-itineraries-toggle">
+        <button onClick={fetchSavedItineraries} className="saved-btn">
+          📁 View Saved Itineraries
+        </button>
+      </div>
+
+      {/* SAVED ITINERARIES LIST */}
+      {showSaved && (
+        <div className="saved-itineraries-section">
+          <h3>Your Saved Itineraries</h3>
+          {savedItineraries.length === 0 ? (
+            <p>No saved itineraries yet. Generate and save some plans!</p>
+          ) : (
+            <div className="saved-itineraries-grid">
+              {savedItineraries.map((itinerary) => (
+                <div key={itinerary.id} className="saved-itinerary-card">
+                  <h4>{itinerary.destination}</h4>
+                  <p><strong>From:</strong> {itinerary.start_city}</p>
+                  <p><strong>Created:</strong> {new Date(itinerary.created_at).toLocaleDateString()}</p>
+                  <p className="saved-itinerary-preview">
+                    {itinerary.itinerary_text.substring(0, 150)}...
+                  </p>
+                  <button 
+                    onClick={() => loadSavedItinerary(itinerary)}
+                    className="load-saved-btn"
+                  >
+                    Load This Plan
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setShowSaved(false)} className="close-saved-btn">
+            Close
+          </button>
+        </div>
+      )}
 
       {/* FORM */}
       <div className="itinerary-form">

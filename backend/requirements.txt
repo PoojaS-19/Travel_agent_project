@@ -4,3 +4,12 @@ google-generativeai
 amadeus
 python-dotenv
 requests
+pydantic
+protobuf
+sqlalchemy
+mysql-connector-python
+bcrypt
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+email-validator

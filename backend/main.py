@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from amadeus import Client, ResponseError
@@ -9,23 +9,14 @@ import requests
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import math
-
 from math import radians, sin, cos, sqrt, atan2
+from sqlalchemy.orm import Session
+from typing import Optional
 
-class IncidentRequest(BaseModel):
-    lat: float
-    lon: float
-
-
-
-def calculate_distance(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
-    a = sin(dlat/2)*2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)*2
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return round(R * c, 2)
-
+# Database imports
+from app.database import engine, get_db, Base
+from app.models import Flight, Train, Itinerary, SearchHistory, SearchType
+from app.services.database_service import FlightService, TrainService, ItineraryService, SearchHistoryService
 
 # Load .env once
 load_dotenv()
@@ -35,6 +26,7 @@ print("GOOGLE:", os.getenv("GOOGLE_API_KEY"))
 print("GEMINI:", os.getenv("GEMINI_API_KEY"))
 print("AMADEUS KEY:", os.getenv("AMADEUS_API_KEY"))
 print("AMADEUS SECRET:", os.getenv("AMADEUS_API_SECRET"))
+print("Database Connection: MySQL configured")
 
 app = FastAPI()
 
@@ -46,6 +38,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create tables on startup (after server initializes)
+@app.on_event("startup")
+async def startup_event():
+    """Create database tables on startup"""
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✓ Database tables created/verified successfully")
+    except Exception as e:
+        print(f"✗ Warning: Could not create database tables: {e}")
+        print("Please check your MySQL connection credentials in .env file")
 
 
 
@@ -66,6 +69,26 @@ def get_nearest_hospital(lat, lon):
 def get_rest_hotel():
     return "Comfort Rest Inn"
 
+
+def get_user_interest_hint(db: Session, user_id: int) -> str:
+    """Build a short recommendation hint from the user's recent saved itineraries."""
+    if not user_id:
+        return ""
+
+    recent_itineraries = ItineraryService.get_user_itineraries(db, user_id, limit=5)
+    if not recent_itineraries:
+        return ""
+
+    seen = []
+    for itinerary in recent_itineraries:
+        if itinerary.destination and itinerary.destination not in seen:
+            seen.append(itinerary.destination)
+    if not seen:
+        return ""
+
+    return "The user has previously shown interest in trips to " + ", ".join(seen[:3]) + "."
+
+
 # ------------------ CONFIGURE GEMINI ------------------
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -85,13 +108,41 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 def home():
     return {"message": "Backend working!"}
 
+# Include routers
+from routes.train_routes import router as train_router
+from app.routers.auth import router as auth_router, get_optional_user_id, get_current_user_id
+from app.routers.hotels import router as hotels_router
+
+app.include_router(auth_router)
+app.include_router(train_router, prefix="/api")
+app.include_router(hotels_router, prefix="/api")
+
 
 # ----------------------------- FLIGHTS -----------------------------
 @app.get("/flights")
-def get_flights(source: str, destination: str, departure: str, return_date: str):
+def get_flights(source: str, destination: str, departure: str, return_date: str, db: Session = Depends(get_db)):
+    """
+    Search for flights - tries database first, then Amadeus API, then generates mock data
+    """
     print(f"Searching flights: {source} -> {destination} on {departure}")
+    
+    # Check if flights already in database
+    existing_flights = db.query(Flight).filter(
+        Flight.source == source,
+        Flight.destination == destination
+    ).all()
+    
+    if existing_flights:
+        return [{
+            "id": f.id,
+            "airline": f.airline,
+            "price": float(f.price),
+            "departure": f.departure.isoformat(),
+            "arrival": f.arrival.isoformat()
+        } for f in existing_flights[:5]]
+    
     try:
-        # Try real API first
+        # Try real API
         if not os.getenv("AMADEUS_API_KEY") or not os.getenv("AMADEUS_API_SECRET"):
             raise Exception("Amadeus keys missing")
 
@@ -106,47 +157,69 @@ def get_flights(source: str, destination: str, departure: str, return_date: str)
 
         flights = []
         for f in response.data[:3]:
+            # Save to database
+            dep_dt = datetime.fromisoformat(f["itineraries"][0]["segments"][0]["departure"]["at"].replace("Z", "+00:00"))
+            arr_dt = datetime.fromisoformat(f["itineraries"][0]["segments"][0]["arrival"]["at"].replace("Z", "+00:00"))
+            
+            flight_db = FlightService.create_flight(
+                db=db,
+                airline=f["validatingAirlineCodes"][0],
+                price=float(f["price"]["grandTotal"]),
+                departure=dep_dt,
+                arrival=arr_dt,
+                source=source,
+                destination=destination,
+                api_response=f
+            )
+            
             flights.append({
-                "airline": f["validatingAirlineCodes"][0],
-                "price": f["price"]["grandTotal"],
-                "departure": f["itineraries"][0]["segments"][0]["departure"]["at"],
-                "arrival": f["itineraries"][0]["segments"][0]["arrival"]["at"]
+                "id": flight_db.id,
+                "airline": flight_db.airline,
+                "price": float(flight_db.price),
+                "departure": flight_db.departure.isoformat(),
+                "arrival": flight_db.arrival.isoformat()
             })
 
         return flights
 
     except Exception as e:
-        print(f"Amadeus API failed or not configured: {e}. Returning MOCK data.")
-        # Fallback to realistic mock data
+        print(f"Amadeus API failed: {e}. Returning MOCK data.")
         import random
-        from datetime import datetime, timedelta
 
-        # Parse the requested departure date to make mock times realistic
         try:
             base_date = datetime.strptime(departure, "%Y-%m-%d")
         except:
             base_date = datetime.now()
 
         mock_flights = []
-        airlines = ["AI", "6E", "UK", "SG"] # Air India, Indigo, Vistara, SpiceJet
+        airlines = ["AI", "6E", "UK", "SG"]
         
         for _ in range(5):
-            # Randomize time
             dep_hour = random.randint(6, 22)
             dep_min = random.choice([0, 15, 30, 45])
             duration_hours = random.randint(1, 4)
             
             dep_dt = base_date.replace(hour=dep_hour, minute=dep_min)
             arr_dt = dep_dt + timedelta(hours=duration_hours, minutes=random.randint(0, 59))
-            
-            # Random price
             price = random.randint(3000, 15000)
 
+            # Save mock flight to database
+            flight_db = FlightService.create_flight(
+                db=db,
+                airline=random.choice(airlines),
+                price=float(price),
+                departure=dep_dt,
+                arrival=arr_dt,
+                source=source,
+                destination=destination
+            )
+
             mock_flights.append({
-                "airline": random.choice(airlines),
-                "price": f"{price}.00",
-                "departure": dep_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-                "arrival": arr_dt.strftime("%Y-%m-%dT%H:%M:%S")
+                "id": flight_db.id,
+                "airline": flight_db.airline,
+                "price": float(flight_db.price),
+                "departure": flight_db.departure.isoformat(),
+                "arrival": flight_db.arrival.isoformat()
             })
             
         return mock_flights
@@ -343,7 +416,11 @@ def emergency(data: dict):
 from datetime import datetime, timedelta
 
 @app.post("/itinerary")
-async def generate_itinerary(details: dict):
+async def generate_itinerary(
+    details: dict,
+    db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_user_id),
+):
     """
     Expects JSON body like:
     { "start_city": "Mumbai",  #optional if not provided assume 'current location'
@@ -364,6 +441,9 @@ async def generate_itinerary(details: dict):
         preferences = details.get("preferences", "")
         start_date = details.get("start_date")  # optional
         language = details.get("language", "English")
+
+        if not preferences and user_id:
+            preferences = get_user_interest_hint(db, user_id)
         
         if language == "Hindi":
           lang_name = "Hindi"
@@ -372,7 +452,8 @@ async def generate_itinerary(details: dict):
         else:
           lang_name = "English"
 
-
+        if preferences:
+            preferences = preferences.strip()
 
         # If a start_date is provided, try parse it; otherwise do not include explicit date in day title
         start_date_obj = None
@@ -392,7 +473,7 @@ Do NOT mix languages.
 
 Starting City: {start_city}
 Destination: {destination}
-
+Preferences: {preferences or 'No special preferences provided'}
 
 If Starting City is different from Destination, include travel from Starting City to Destination on DAY 1 with realistic travel time and cost.
 
@@ -506,6 +587,22 @@ Now generate the JSON for the user's inputs.
                 clean_content = clean_content[:-3]
             
             data = json.loads(clean_content)
+
+            # Persist itinerary for authenticated users
+            if user_id and isinstance(data, dict) and data.get("itinerary_text") and data.get("daily_plans"):
+                try:
+                    ItineraryService.create_itinerary(
+                        db=db,
+                        user_id=user_id,
+                        start_city=start_city,
+                        destination=destination,
+                        itinerary_text=data.get("itinerary_text", ""),
+                        daily_plans=data.get("daily_plans", []),
+                        language=language,
+                    )
+                except Exception as save_error:
+                    print("Failed to save itinerary:", save_error)
+
             return data # Returns dict with itinerary_text and daily_plans
         except Exception as e:
             print("Failed to parse JSON:", e)
@@ -517,10 +614,44 @@ Now generate the JSON for the user's inputs.
         print("ERROR generating itinerary:", e)
         return {"error": str(e)}
 
-    
+
+# ----------------------------- GET SAVED ITINERARIES -----------------------------
+@app.get("/itineraries")
+async def get_saved_itineraries(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """
+    Get all saved itineraries for the authenticated user
+    """
+    try:
+        itineraries = ItineraryService.get_user_itineraries(db, user_id)
+        return {
+            "itineraries": [
+                {
+                    "id": it.id,
+                    "start_city": it.start_city,
+                    "destination": it.destination,
+                    "itinerary_text": it.itinerary_text,
+                    "daily_plans": it.daily_plans,
+                    "language": it.language,
+                    "created_at": it.created_at.isoformat(),
+                }
+                for it in itineraries
+            ]
+        }
+    except Exception as e:
+        print("ERROR fetching itineraries:", e)
+        return {"error": str(e)}
+
+
 # ----------------------------- chatbot (GEMINI) - SMART VERSION -----------------------------
 @app.post("/chatbot")
-async def travel_chatbot(data: dict):
+async def travel_chatbot(
+    data: dict,
+    db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_user_id),
+):
     lat = data.get("lat")
     lon = data.get("lon")
 
@@ -528,6 +659,7 @@ async def travel_chatbot(data: dict):
         user_question = data.get("question", "")
         language = data.get("language", "English")
         history = data.get("history", [])  # conversation history
+        previous_interest_hint = get_user_interest_hint(db, user_id) if user_id else ""
 
         # Build conversation context from history
         history_text = ""
@@ -537,9 +669,14 @@ async def travel_chatbot(data: dict):
                 role = "User" if msg.get("sender") == "user" else "Myra"
                 history_text += f"{role}: {msg.get('text', '')}\n"
 
+        hint_section = ""
+        if previous_interest_hint:
+            hint_section = f"\nUser Interest Hint: {previous_interest_hint}\n"
+
         prompt = f"""
 You are an intelligent travel assistant named Myra. You are as smart and conversational as ChatGPT or Gemini.
 
+{hint_section}
 IMPORTANT LANGUAGE RULE:
 Respond ONLY in {language}. Do NOT mix languages.
 
@@ -638,6 +775,24 @@ Now respond to the user's latest message as JSON:
             if raw.endswith("```"):
                 raw = raw[:-3]
             parsed = json.loads(raw.strip())
+
+            # Save plan replies for authenticated users
+            if user_id and isinstance(parsed, dict):
+                plan_payload = parsed.get("plan_data") if isinstance(parsed.get("plan_data"), dict) else parsed
+                if plan_payload and plan_payload.get("destination") and plan_payload.get("daily_plans"):
+                    try:
+                        ItineraryService.create_itinerary(
+                            db=db,
+                            user_id=user_id,
+                            start_city=plan_payload.get("start_city", "your current location"),
+                            destination=plan_payload.get("destination"),
+                            itinerary_text=parsed.get("reply", ""),
+                            daily_plans=plan_payload.get("daily_plans", []),
+                            language=language,
+                        )
+                    except Exception as save_error:
+                        print("Failed to save chatbot itinerary:", save_error)
+
             return parsed
         except Exception:
             # Fallback: return as plain chat
@@ -649,13 +804,18 @@ Now respond to the user's latest message as JSON:
 
 # ----------------------------- chatbot STREAM (SSE) -----------------------------
 @app.post("/chatbot-stream")
-async def travel_chatbot_stream(data: dict):
+async def travel_chatbot_stream(
+    data: dict,
+    db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_user_id),
+):
     """Streaming version of chatbot using Server-Sent Events."""
     lat = data.get("lat")
     lon = data.get("lon")
     user_question = data.get("question", "")
     language = data.get("language", "English")
     history = data.get("history", [])
+    previous_interest_hint = get_user_interest_hint(db, user_id) if user_id else ""
 
     # Build conversation context from history
     history_text = ""
@@ -665,10 +825,14 @@ async def travel_chatbot_stream(data: dict):
             role = "User" if msg.get("sender") == "user" else "Myra"
             history_text += f"{role}: {msg.get('text', '')}\n"
 
+    interest_section = ""
+    if previous_interest_hint:
+        interest_section = f"User Interest Hint: {previous_interest_hint}\n\n"
+
     prompt = f"""
 You are an intelligent travel assistant named Myra. You are as smart and conversational as ChatGPT or Gemini.
 
-IMPORTANT LANGUAGE RULE:
+{interest_section}IMPORTANT LANGUAGE RULE:
 Respond ONLY in {language}. Do NOT mix languages.
 
 User's Location: Lat: {lat}, Lon: {lon}
@@ -738,16 +902,37 @@ If the question is not travel-related, politely refuse.
 """
 
     async def event_generator():
+        full_text = ""
+        import json as _json
         try:
             response = gemini_model.generate_content(prompt, stream=True)
             for chunk in response:
                 if hasattr(chunk, 'text') and chunk.text:
+                    full_text += chunk.text
                     # SSE format: data: <text>\n\n
-                    import json as _json
                     yield f"data: {_json.dumps({'text': chunk.text})}\n\n"
+
+            # Persist any streamed plan for authenticated users
+            if user_id and "---JSON_START---" in full_text and "---JSON_END---" in full_text:
+                try:
+                    json_text = full_text.split("---JSON_START---", 1)[1].split("---JSON_END---", 1)[0].strip()
+                    import json as _json2
+                    plan_data = _json2.loads(json_text)
+                    if isinstance(plan_data, dict) and plan_data.get("destination") and plan_data.get("daily_plans"):
+                        ItineraryService.create_itinerary(
+                            db=db,
+                            user_id=user_id,
+                            start_city=plan_data.get("start_city", "your current location"),
+                            destination=plan_data.get("destination"),
+                            itinerary_text=plan_data.get("reply", ""),
+                            daily_plans=plan_data.get("daily_plans", []),
+                            language=language,
+                        )
+                except Exception as save_error:
+                    print("Failed to save streamed chatbot itinerary:", save_error)
+
             yield f"data: {_json.dumps({'done': True})}\n\n"
         except Exception as e:
-            import json as _json
             yield f"data: {_json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
