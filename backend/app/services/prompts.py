@@ -81,3 +81,34 @@ INSTRUCTIONS — Read carefully:
      }}
    }}
 """
+
+RECOMMENDATION_INFERENCE_PROMPT = """
+Analyze the user's travel history below and infer their preferences.
+Focus on themes like: beaches, mountains, cities, adventure, relaxation, culture, food, budget travel, luxury, etc.
+
+History:
+Itineraries: {itineraries}
+Searches: {searches}
+
+Provide a concise summary of inferred preferences (max 100 words).
+"""
+
+RECOMMENDATION_GENERATION_PROMPT = """
+Based on the user's inferred preferences: "{preferences}"
+
+Generate 3 personalized itinerary suggestions that match these preferences.
+Each suggestion should be for a different destination/theme.
+
+Respond in {language} with valid JSON only:
+{{
+  "recommendations": [
+    {{
+      "title": "Suggestion Title",
+      "destination": "Destination City/Country",
+      "theme": "Brief theme description",
+      "reason": "Why this matches their preferences (2-3 sentences)",
+      "suggested_duration": "3-5 days"
+    }}
+  ]
+}}
+"""

@@ -17,6 +17,7 @@ from typing import Optional
 from app.database import engine, get_db, Base
 from app.models import Flight, Train, Itinerary, SearchHistory, SearchType
 from app.services.database_service import FlightService, TrainService, ItineraryService, SearchHistoryService
+from app.services.recommendation_service import RecommendationService
 
 # Load .env once
 load_dotenv()
@@ -643,6 +644,21 @@ async def get_saved_itineraries(
     except Exception as e:
         print("ERROR fetching itineraries:", e)
         return {"error": str(e)}
+
+
+@app.get("/recommendations")
+async def get_recommendations(
+    language: str = "English",
+    db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    """Get personalized itinerary recommendations based on user history. Falls back to generic suggestions for anonymous or new users."""
+    try:
+        recommendations = RecommendationService.get_personalized_recommendations(db, user_id, language)
+        return {"recommendations": recommendations}
+    except Exception as e:
+        print("ERROR fetching recommendations:", e)
+        return {"error": str(e), "recommendations": RecommendationService.generic_recommendations(language)}
 
 
 # ----------------------------- chatbot (GEMINI) - SMART VERSION -----------------------------

@@ -138,4 +138,4 @@ def search_trains(
     
     return {"trains": trains_list, "count": len(trains_list)}
 
-    return {"trains": results[:20], "count": len(results[:20])}
+    
