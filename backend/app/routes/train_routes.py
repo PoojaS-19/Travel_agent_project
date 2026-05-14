@@ -66,7 +66,7 @@ def get_day_of_week(date_str):
     except:
         return None
 
-@router.get("/")
+@router.get("")
 def search_trains(
     source: str = Query(..., description="Source station name"),
     destination: str = Query(..., description="Destination station name"),

@@ -2033,7 +2033,102 @@ body {
   background: #5a6268;
 }
 
-/* --- Carousel Container --- */
+/* ================= RECOMMENDATIONS SECTION ================= */
+.recommendations-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 25px;
+  margin: 25px 0;
+  color: white;
+}
+
+.recommendations-section h3 {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0 0 10px 0;
+  color: white;
+}
+
+.recommendations-section p {
+  font-size: 16px;
+  margin: 0 0 20px 0;
+  opacity: 0.95;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.recommendation-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  color: #333;
+}
+
+.recommendation-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+.recommendation-card h4 {
+  color: #667eea;
+  font-size: 20px;
+  margin: 0 0 12px 0;
+  font-weight: bold;
+}
+
+.recommendation-card p {
+  font-size: 14px;
+  margin: 8px 0;
+  color: #555;
+  line-height: 1.5;
+}
+
+.recommendation-card strong {
+  color: #764ba2;
+}
+
+.recommendation-reason {
+  font-style: italic;
+  color: #666;
+  padding: 12px;
+  background: rgba(102, 126, 234, 0.1);
+  border-left: 3px solid #667eea;
+  margin: 15px 0 !important;
+  border-radius: 4px;
+}
+
+.try-recommendation-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  margin-top: 15px;
+}
+
+.try-recommendation-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+}
+
+.try-recommendation-btn:active {
+  transform: translateY(0);
+}
+
+/* ================= IMAGE CAROUSEL ================= */
 .image-carousel-container {
   position: relative;
   margin-bottom: 15px;
@@ -2878,4 +2973,131 @@ body {
 .train-hero p {
   font-size: 18px;
   margin-bottom: 20px;
+}
+
+/* ================= REVIEW SYSTEM ================= */
+
+.rating-display {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 5px 0;
+}
+
+.rating-display .stars {
+  color: #ffd700;
+  font-size: 16px;
+}
+
+.rate-place-btn {
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.rate-place-btn:hover {
+  background: #ff5252;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.review-form .form-group {
+  margin-bottom: 20px;
+}
+
+.review-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.rating-input {
+  display: flex;
+  gap: 5px;
+}
+
+.rating-input .star {
+  font-size: 24px;
+  cursor: pointer;
+  color: #ddd;
+  transition: color 0.2s ease;
+}
+
+.rating-input .star.active {
+  color: #ffd700;
+}
+
+.review-form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.review-form select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 30px;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.submit-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.submit-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
 }

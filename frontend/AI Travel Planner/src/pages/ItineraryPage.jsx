@@ -257,6 +257,96 @@ function ImageCarousel({ placeName, destination }) {
   );
 }
 
+function ReviewForm({ place, destination, onClose }) {
+  const [rating, setRating] = useState(5);
+  const [review, setReview] = useState("");
+  const [tripType, setTripType] = useState("");
+  const [mood, setMood] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submitReview = async () => {
+    setLoading(true);
+    try {
+      await API.post("/api/reviews", {
+        place_name: place.place_name,
+        destination: destination,
+        rating: rating,
+        review: review || null,
+        category: place.category,
+        trip_type: tripType || null,
+        mood: mood || null,
+        lat: place.lat,
+        lon: place.lon
+      });
+      alert("Thank you for your review!");
+      onClose();
+    } catch (error) {
+      alert("Failed to submit review. Please try again.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="review-form">
+      <div className="form-group">
+        <label>Rating:</label>
+        <div className="rating-input">
+          {[1, 2, 3, 4, 5].map(star => (
+            <span
+              key={star}
+              className={`star ${rating >= star ? 'active' : ''}`}
+              onClick={() => setRating(star)}
+            >
+              ⭐
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Review (optional):</label>
+        <textarea
+          value={review}
+          onChange={(e) => setReview(e.target.value)}
+          placeholder="Share your experience..."
+          rows={3}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>Trip Type:</label>
+        <select value={tripType} onChange={(e) => setTripType(e.target.value)}>
+          <option value="">Select...</option>
+          <option value="solo">Solo</option>
+          <option value="friends">Friends</option>
+          <option value="family">Family</option>
+          <option value="couple">Couple</option>
+          <option value="business">Business</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label>Mood:</label>
+        <select value={mood} onChange={(e) => setMood(e.target.value)}>
+          <option value="">Select...</option>
+          <option value="chill">Chill</option>
+          <option value="adventure">Adventure</option>
+          <option value="cultural">Cultural</option>
+          <option value="romantic">Romantic</option>
+          <option value="exciting">Exciting</option>
+        </select>
+      </div>
+
+      <div className="modal-actions">
+        <button onClick={onClose} className="cancel-btn">Cancel</button>
+        <button onClick={submitReview} disabled={loading} className="submit-btn">
+          {loading ? "Submitting..." : "Submit Review"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
 
   const [form, setForm] = useState({
@@ -273,6 +363,9 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   const [altModal, setAltModal] = useState({ isOpen: false, place: "", loading: false, text: "" });
   const [savedItineraries, setSavedItineraries] = useState([]);
   const [showSaved, setShowSaved] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [communitySuggestions, setCommunitySuggestions] = useState([]);
+  const [reviewModal, setReviewModal] = useState({ isOpen: false, place: null });
   const printRef = useRef();
 
   useEffect(() => {
@@ -304,6 +397,28 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
         setDailyPlans(data.daily_plans);
       } else {
         setResult(data.itinerary || data);
+      }
+
+      // Fetch personalized recommendations
+      try {
+        const recRes = await API.get("/recommendations", { params: { language } });
+        setRecommendations(recRes.data.recommendations || []);
+      } catch (recError) {
+        console.log("Could not fetch recommendations:", recError);
+        setRecommendations([]);
+      }
+
+      // Fetch community suggestions
+      try {
+        const commRes = await API.post("/api/community-recommendations", {
+          destination: form.destination,
+          theme: form.theme,
+          preferences: form.preferences
+        });
+        setCommunitySuggestions(commRes.data.suggestions || []);
+      } catch (commError) {
+        console.log("Could not fetch community suggestions:", commError);
+        setCommunitySuggestions([]);
       }
 
     } catch {
@@ -482,6 +597,32 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     setShowSaved(false);
   };
 
+  const addToItinerary = (suggestion) => {
+    if (dailyPlans.length === 0) return;
+
+    const updatedPlans = [...dailyPlans];
+    const firstDay = updatedPlans[0];
+
+    // Create activity from suggestion
+    const newActivity = {
+      time: "Flexible",
+      place_name: suggestion.place_name,
+      category: suggestion.category || "Attraction",
+      description: `Community recommended: ${suggestion.reason}`,
+      lat: suggestion.lat,
+      lon: suggestion.lon
+    };
+
+    // Add to first day's activities
+    firstDay.activities = [...firstDay.activities, newActivity];
+    setDailyPlans(updatedPlans);
+
+    // Remove from suggestions
+    setCommunitySuggestions(prev => prev.filter(s => s.place_name !== suggestion.place_name));
+
+    alert(`${suggestion.place_name} added to your itinerary!`);
+  };
+
   return (
     <div className="itinerary-page">
 
@@ -569,6 +710,66 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
         </div>
       )}
 
+      {/* RECOMMENDATIONS */}
+      {recommendations.length > 0 && (
+        <div className="recommendations-section">
+          <h3>Recommended for You</h3>
+          <p>Based on your travel history, here are some personalized suggestions:</p>
+          <div className="recommendations-grid">
+            {recommendations.map((rec, index) => (
+              <div key={index} className="recommendation-card">
+                <h4>{rec.title}</h4>
+                <p><strong>Destination:</strong> {rec.destination}</p>
+                <p><strong>Theme:</strong> {rec.theme}</p>
+                <p><strong>Duration:</strong> {rec.suggested_duration}</p>
+                <p className="recommendation-reason">{rec.reason}</p>
+                <button 
+                  onClick={() => {
+                    setForm({
+                      ...form,
+                      destination: rec.destination,
+                      theme: rec.theme,
+                      days: rec.suggested_duration.split('-')[0].trim() // e.g., "3" from "3-5 days"
+                    });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="try-recommendation-btn"
+                >
+                  Try This Itinerary
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* COMMUNITY SUGGESTIONS */}
+      {communitySuggestions.length > 0 && (
+        <div className="recommendations-section">
+          <h3>Suggested Nearby Experiences</h3>
+          <p>Community-rated places near your destination:</p>
+          <div className="recommendations-grid">
+            {communitySuggestions.map((suggestion, index) => (
+              <div key={index} className="recommendation-card">
+                <h4>{suggestion.place_name}</h4>
+                <div className="rating-display">
+                  <span className="stars">⭐</span>
+                  <span>{suggestion.rating}</span>
+                </div>
+                <p className="recommendation-reason">{suggestion.reason}</p>
+                <p><strong>Distance:</strong> {suggestion.distance}</p>
+                <button 
+                  onClick={() => addToItinerary(suggestion)}
+                  className="try-recommendation-btn"
+                >
+                  Add To Itinerary
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* OUTPUT BOARD */}
       <div className="output-section">
         <div className="output-board" ref={printRef}>
@@ -618,6 +819,12 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
 
                           <div className="activity-footer">
                             {activity.cost && <span className="activity-cost">{activity.cost}</span>}
+                            <button
+                              onClick={() => setReviewModal({ isOpen: true, place: activity })}
+                              className="rate-place-btn"
+                            >
+                              ⭐ Rate This Place
+                            </button>
                             <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${activity.lat},${activity.lon}`}
                               target="_blank"
@@ -668,6 +875,20 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* REVIEW MODAL */}
+      {reviewModal.isOpen && reviewModal.place && (
+        <div className="modal-overlay" onClick={() => setReviewModal({ isOpen: false, place: null })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Rate {reviewModal.place.place_name}</h3>
+            <ReviewForm
+              place={reviewModal.place}
+              destination={form.destination}
+              onClose={() => setReviewModal({ isOpen: false, place: null })}
+            />
           </div>
         </div>
       )}

@@ -39,9 +39,9 @@ class Flight(Base):
 
 
 class TrainType(str, enum.Enum):
-    EXPRESS = "Express"
-    PASSENGER = "Passenger"
-    SUPERFAST = "Superfast"
+    Express = "Express"
+    Passenger = "Passenger"
+    Superfast = "Superfast"
 
 
 class Train(Base):
@@ -177,3 +177,29 @@ class SearchHistory(Base):
     user = relationship("User", back_populates="search_history")
 
     # Index hint: user_id
+
+
+class PlaceReview(Base):
+    __tablename__ = "place_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    place_name = Column(String(200), nullable=False)
+    destination = Column(String(100), nullable=False)
+    rating = Column(DECIMAL(2, 1), nullable=False)  # 1.0 to 5.0
+    review = Column(String(1000), nullable=True)
+    category = Column(String(50), nullable=True)
+    trip_type = Column(String(50), nullable=True)  # e.g., "friends", "family"
+    mood = Column(String(50), nullable=True)  # e.g., "chill", "adventure"
+    lat = Column(DECIMAL(10, 8), nullable=True)
+    lon = Column(DECIMAL(11, 8), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="place_reviews")
+
+    # Index hint: destination, place_name
+
+
+# Add to User model
+User.place_reviews = relationship("PlaceReview", back_populates="user", cascade="all, delete-orphan")

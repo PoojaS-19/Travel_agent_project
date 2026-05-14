@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import API from "../api";
 import "../App.css";
 
@@ -25,7 +25,7 @@ export default function TrainSearchPage() {
     }
 
     try {
-      const res = await API.get("/trains", {
+      const res = await API.get("/api/trains", {
         params: { 
           source: from, 
           destination: to, 
@@ -120,7 +120,19 @@ export default function TrainSearchPage() {
 
       {/* RESULTS SECTION */}
       <div className="train-results-enhanced" style={{ maxWidth: "800px", margin: "0 auto", padding: "20px" }}>
-        {loading && <div style={{ textAlign: "center", padding: "20px", fontSize: "18px" }}>Loading...</div>}
+        {loading && (
+          <div style={{ textAlign: "center", padding: "40px" }}>
+            <div className="spinner" style={{ 
+              width: "40px", height: "40px", 
+              border: "4px solid rgba(255, 87, 34, 0.3)", 
+              borderTop: "4px solid #ff5722", 
+              borderRadius: "50%", 
+              animation: "spin 1s linear infinite",
+              margin: "0 auto"
+            }}></div>
+            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
         
         {error && (
           <div className="error" style={{ 
@@ -157,7 +169,7 @@ export default function TrainSearchPage() {
                 </div>
                 <div>
                   <div className="airline-name" style={{ fontSize: "18px", fontWeight: "bold" }}>{t.name}</div>
-                  <div style={{ fontSize: "14px", color: "#888" }}>#{t.train_no}</div>
+                  <div style={{ fontSize: "14px", color: "#888" }}>#{t.train_number}</div>
                 </div>
               </div>
               <div style={{ background: "#e3f2fd", color: "#1976d2", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold" }}>
