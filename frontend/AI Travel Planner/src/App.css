@@ -674,6 +674,42 @@ body {
   font-size: 14px;
 }
 
+.success-message {
+  background: #ecfdf5;
+  color: #047857;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.reset-form {
+  margin-top: 20px;
+}
+
+.reset-code-box {
+  margin: 20px 0 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  text-align: left;
+  word-break: break-all;
+}
+
+.reset-code-box span {
+  display: block;
+  color: #555;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.reset-code-box strong {
+  color: #111827;
+  font-size: 13px;
+}
+
 .auth-links {
   margin-top: 20px;
   padding-top: 20px;
@@ -3100,4 +3136,396 @@ body {
 .submit-btn:disabled {
   background: #6c757d;
   cursor: not-allowed;
+}
+
+/* ================= SAVED TRIPS DASHBOARD ================= */
+
+.saved-trips-page {
+  min-height: 100vh;
+  padding: 110px 24px 40px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.saved-trips-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+}
+
+.saved-trips-sidebar,
+.saved-trip-detail {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.saved-trips-sidebar {
+  padding: 22px;
+  align-self: start;
+  position: sticky;
+  top: 96px;
+}
+
+.saved-trips-heading,
+.saved-trip-detail-header,
+.saved-trip-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-trips-heading h1,
+.saved-trip-detail-header h2 {
+  margin: 0;
+  color: #111827;
+}
+
+.saved-trip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.saved-trip-list-item {
+  width: 100%;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.saved-trip-list-item:hover,
+.saved-trip-list-item.active {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.saved-trip-list-item strong,
+.saved-trip-list-item span,
+.saved-trip-list-item small {
+  display: block;
+}
+
+.saved-trip-list-item strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.saved-trip-list-item span {
+  margin-top: 5px;
+  color: #475569;
+}
+
+.saved-trip-list-item small {
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.saved-trip-detail {
+  padding: 28px;
+  min-height: 640px;
+}
+
+.saved-trip-detail-header {
+  align-items: flex-start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.saved-trip-detail-header p,
+.saved-trip-muted,
+.saved-trip-empty p {
+  color: #64748b;
+}
+
+.saved-trip-kicker {
+  margin: 0 0 6px;
+  color: #2563eb !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.saved-trip-primary-btn,
+.saved-trip-secondary-btn,
+.saved-trip-danger-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saved-trip-primary-btn {
+  background: #2563eb;
+  color: white;
+}
+
+.saved-trip-secondary-btn {
+  background: #e2e8f0;
+  color: #1f2937;
+}
+
+.saved-trip-danger-btn {
+  background: #dc2626;
+  color: white;
+}
+
+.saved-trip-primary-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.saved-trip-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.saved-trip-stats div {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.saved-trip-stats strong,
+.saved-trip-stats span {
+  display: block;
+}
+
+.saved-trip-stats strong {
+  color: #111827;
+  font-size: 22px;
+}
+
+.saved-trip-stats span {
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.saved-trip-summary,
+.saved-trip-days,
+.saved-trip-edit-form {
+  margin-top: 24px;
+}
+
+.saved-trip-summary h3,
+.saved-trip-days h3 {
+  margin: 0 0 12px;
+  color: #111827;
+}
+
+.saved-trip-summary p {
+  white-space: pre-wrap;
+  color: #334155;
+  line-height: 1.65;
+}
+
+.saved-trip-edit-form {
+  display: grid;
+  gap: 16px;
+}
+
+.saved-trip-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.saved-trip-edit-form label {
+  display: grid;
+  gap: 7px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.saved-trip-edit-form input,
+.saved-trip-edit-form select,
+.saved-trip-edit-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.saved-trip-edit-form textarea {
+  resize: vertical;
+}
+
+.saved-trip-day-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 16px;
+  background: #ffffff;
+}
+
+.saved-trip-day-card h4 {
+  margin: 0 0 14px;
+  color: #111827;
+}
+
+.saved-trip-activity-list {
+  display: grid;
+  gap: 14px;
+}
+
+.saved-trip-activity {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.saved-trip-activity:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.saved-trip-activity > span {
+  color: #2563eb;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.saved-trip-activity strong {
+  display: block;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.saved-trip-activity p {
+  color: #475569;
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+
+.saved-trip-activity small {
+  color: #64748b;
+}
+
+.saved-trip-inline-btn {
+  display: inline-flex;
+  margin-top: 10px;
+  background: #e0f2fe;
+  color: #075985;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saved-trip-inline-btn:hover {
+  background: #bae6fd;
+}
+
+.saved-place-edit-form {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+}
+
+.saved-place-edit-form label {
+  display: grid;
+  gap: 7px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.saved-place-edit-form input,
+.saved-place-edit-form select,
+.saved-place-edit-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.saved-place-edit-form textarea {
+  resize: vertical;
+}
+
+.saved-trip-empty {
+  padding: 28px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+}
+
+.saved-trip-empty.large {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .saved-trips-shell,
+  .saved-trip-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-trips-sidebar {
+    position: static;
+  }
+
+  .saved-trip-detail-header,
+  .saved-trips-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .saved-trips-page {
+    padding: 100px 14px 28px;
+  }
+
+  .saved-trip-detail,
+  .saved-trips-sidebar {
+    padding: 18px;
+  }
+
+  .saved-trip-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-trip-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .saved-trip-primary-btn,
+  .saved-trip-secondary-btn,
+  .saved-trip-danger-btn {
+    flex: 1;
+  }
+
+  .saved-trip-activity {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }

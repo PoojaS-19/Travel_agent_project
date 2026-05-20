@@ -81,6 +81,7 @@ export default function LoginPage() {
         </form>
 
         <div className="auth-links">
+          <p><Link to="/forgot-password">Forgot password?</Link></p>
           <p>Don't have an account? <Link to="/signup">Sign up here</Link></p>
         </div>
       </div>

@@ -5,6 +5,8 @@ import RestaurantsPage from "./pages/RestaurantsPage";
 import FlightsPage from "./pages/FlightsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import SavedTripsPage from "./pages/SavedTripsPage";
 import FloatingChatbot from "./components/FloatingChatbot";
 import "./App.css";
 import TrainSearchPage from "./pages/TrainSearchPage";
@@ -51,6 +53,7 @@ export default function App() {
         <div className="nav-links">
           <Link to="/">Home</Link>
           <Link to="/itinerary">Itinerary</Link>
+          <Link to="/saved-trips">Saved Trips</Link>
           <Link to="/hotels">Hotels</Link>
           <Link to="/restaurants">Restaurants</Link>
           <Link to="/flights">Flights</Link>
@@ -87,6 +90,8 @@ export default function App() {
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/saved-trips" element={<SavedTripsPage />} />
 
         <Route
           path="/itinerary"

@@ -15,6 +15,7 @@ from typing import Optional
 
 # Database imports
 from app.database import engine, get_db, Base
+from app.models.schemas import ItineraryUpdate
 from app.models import Flight, Train, Itinerary, SearchHistory, SearchType
 from app.services.database_service import FlightService, TrainService, ItineraryService, SearchHistoryService
 from app.services.recommendation_service import RecommendationService
@@ -88,6 +89,19 @@ def get_user_interest_hint(db: Session, user_id: int) -> str:
         return ""
 
     return "The user has previously shown interest in trips to " + ", ".join(seen[:3]) + "."
+
+
+def serialize_itinerary(itinerary: Itinerary) -> dict:
+    """Convert an itinerary model to an API response dict."""
+    return {
+        "id": itinerary.id,
+        "start_city": itinerary.start_city,
+        "destination": itinerary.destination,
+        "itinerary_text": itinerary.itinerary_text,
+        "daily_plans": itinerary.daily_plans,
+        "language": itinerary.language,
+        "created_at": itinerary.created_at.isoformat(),
+    }
 
 
 # ------------------ CONFIGURE GEMINI ------------------
@@ -630,22 +644,66 @@ async def get_saved_itineraries(
     try:
         itineraries = ItineraryService.get_user_itineraries(db, user_id)
         return {
-            "itineraries": [
-                {
-                    "id": it.id,
-                    "start_city": it.start_city,
-                    "destination": it.destination,
-                    "itinerary_text": it.itinerary_text,
-                    "daily_plans": it.daily_plans,
-                    "language": it.language,
-                    "created_at": it.created_at.isoformat(),
-                }
-                for it in itineraries
-            ]
+            "itineraries": [serialize_itinerary(it) for it in itineraries]
         }
     except Exception as e:
         print("ERROR fetching itineraries:", e)
         return {"error": str(e)}
+
+
+@app.get("/itineraries/{itinerary_id}")
+async def get_saved_itinerary(
+    itinerary_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Get a single saved itinerary for the authenticated user."""
+    itinerary = ItineraryService.get_user_itinerary(db, user_id, itinerary_id)
+    if not itinerary:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+    return serialize_itinerary(itinerary)
+
+
+@app.put("/itineraries/{itinerary_id}")
+async def update_saved_itinerary(
+    itinerary_id: int,
+    payload: ItineraryUpdate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Update a saved itinerary owned by the authenticated user."""
+    itinerary = ItineraryService.get_user_itinerary(db, user_id, itinerary_id)
+    if not itinerary:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+
+    if hasattr(payload, "model_dump"):
+        updates = payload.model_dump(exclude_unset=True)
+    else:
+        updates = payload.dict(exclude_unset=True)
+    if not updates:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="No changes provided")
+
+    updated = ItineraryService.update_itinerary(db, itinerary, updates)
+    return serialize_itinerary(updated)
+
+
+@app.delete("/itineraries/{itinerary_id}")
+async def delete_saved_itinerary(
+    itinerary_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Delete a saved itinerary owned by the authenticated user."""
+    itinerary = ItineraryService.get_user_itinerary(db, user_id, itinerary_id)
+    if not itinerary:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+
+    ItineraryService.delete_itinerary(db, itinerary)
+    return {"message": "Itinerary deleted successfully"}
 
 
 @app.get("/recommendations")

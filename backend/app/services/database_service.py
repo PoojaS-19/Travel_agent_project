@@ -118,6 +118,29 @@ class ItineraryService:
             query = query.limit(limit)
         return query.all()
 
+    @staticmethod
+    def get_user_itinerary(db: Session, user_id: int, itinerary_id: int):
+        """Get one itinerary that belongs to a user"""
+        return db.query(Itinerary).filter(
+            Itinerary.id == itinerary_id,
+            Itinerary.user_id == user_id
+        ).first()
+
+    @staticmethod
+    def update_itinerary(db: Session, itinerary: Itinerary, updates: dict):
+        """Update an existing itinerary"""
+        for field, value in updates.items():
+            setattr(itinerary, field, value)
+        db.commit()
+        db.refresh(itinerary)
+        return itinerary
+
+    @staticmethod
+    def delete_itinerary(db: Session, itinerary: Itinerary):
+        """Delete an itinerary"""
+        db.delete(itinerary)
+        db.commit()
+
 
 class SearchHistoryService:
     """Search history database operations"""

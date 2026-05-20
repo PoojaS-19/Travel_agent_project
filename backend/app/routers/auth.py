@@ -6,7 +6,15 @@ from sqlalchemy.orm import Session
 from jose import JWTError
 from app.database import get_db
 from app.models import User
-from app.models.schemas import UserSignup, UserLogin, TokenResponse, UserResponse
+from app.models.schemas import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    UserSignup,
+    UserLogin,
+    TokenResponse,
+    UserResponse,
+)
 from app.services.auth_service import AuthService
 from datetime import timedelta
 from typing import Optional
@@ -174,6 +182,61 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         token_type="bearer",
         user=user_response
     )
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Request a password reset token.
+
+    In this demo project, the reset token is returned in the response because
+    no email service is configured yet.
+    """
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email"
+        )
+
+    reset_token = AuthService.create_password_reset_token(user.email)
+
+    return ForgotPasswordResponse(
+        message="Password reset code generated. Use it within 15 minutes.",
+        reset_token=reset_token
+    )
+
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset a user's password using a valid reset token.
+    """
+    if len(request.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long"
+        )
+
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email"
+        )
+
+    if not AuthService.verify_password_reset_token(user.email, request.reset_token):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code"
+        )
+
+    user.password_hash = AuthService.hash_password(request.new_password)
+    db.commit()
+
+    return {"message": "Password reset successfully. You can now log in."}
 
 
 @router.get("/me", response_model=UserResponse)

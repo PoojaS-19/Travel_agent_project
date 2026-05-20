@@ -31,6 +31,36 @@ class UserLogin(BaseModel):
         }
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Schema for requesting a password reset token"""
+    email: EmailStr
+
+    class Config:
+        example = {
+            "email": "john@example.com"
+        }
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Schema for password reset request response"""
+    message: str
+    reset_token: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for resetting a password with a reset token"""
+    email: EmailStr
+    reset_token: str
+    new_password: str
+
+    class Config:
+        example = {
+            "email": "john@example.com",
+            "reset_token": "abc123",
+            "new_password": "NewSecurePassword123!"
+        }
+
+
 class UserResponse(BaseModel):
     """Schema for user response (without password)"""
     id: int
@@ -64,3 +94,23 @@ class TokenResponse(BaseModel):
 class TokenData(BaseModel):
     """Schema for decoded token data"""
     user_id: Optional[int] = None
+
+
+class ItineraryUpdate(BaseModel):
+    """Schema for updating a saved itinerary"""
+    start_city: Optional[str] = None
+    destination: Optional[str] = None
+    itinerary_text: Optional[str] = None
+    daily_plans: Optional[list] = None
+    language: Optional[str] = None
+
+
+class ItineraryResponse(BaseModel):
+    """Schema for saved itinerary response"""
+    id: int
+    start_city: Optional[str] = None
+    destination: Optional[str] = None
+    itinerary_text: Optional[str] = None
+    daily_plans: Optional[list] = None
+    language: Optional[str] = None
+    created_at: str

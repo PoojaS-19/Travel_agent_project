@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
+import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,6 +17,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+RESET_TOKEN_EXPIRE_MINUTES = 15
+password_reset_tokens = {}
 
 
 class AuthService:
@@ -73,3 +76,30 @@ class AuthService:
             return payload
         except JWTError as e:
             raise JWTError(f"Invalid token: {e}")
+
+    @staticmethod
+    def create_password_reset_token(email: str) -> str:
+        """Create a short-lived password reset token for a user email"""
+        token = secrets.token_urlsafe(32)
+        password_reset_tokens[email] = {
+            "token": token,
+            "expires_at": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+        }
+        return token
+
+    @staticmethod
+    def verify_password_reset_token(email: str, token: str) -> bool:
+        """Verify a password reset token and consume it when valid"""
+        token_data = password_reset_tokens.get(email)
+        if not token_data:
+            return False
+
+        if datetime.utcnow() > token_data["expires_at"]:
+            password_reset_tokens.pop(email, None)
+            return False
+
+        if not secrets.compare_digest(token_data["token"], token):
+            return False
+
+        password_reset_tokens.pop(email, None)
+        return True
