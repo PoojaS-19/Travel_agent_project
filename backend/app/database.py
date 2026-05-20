@@ -18,8 +18,9 @@ SQLALCHEMY_DATABASE_URL = (
 # Create engine
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    echo=True,  # Set to False in production (logs all SQL queries)
-    pool_pre_ping=True  # Verifies connection before use
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,  # Verifies connection before use
+    connect_args={"connection_timeout": int(os.getenv("DB_CONNECTION_TIMEOUT", "5"))},
 )
 
 # Session factory

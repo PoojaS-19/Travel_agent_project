@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import API from "../api";
 import "../App.css";
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite_token");
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -26,14 +28,14 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await API.post("/auth/signup", formData);
+      const response = await API.post("/auth/signup", { ...formData, invite_token: inviteToken || undefined });
 
       // Store token in localStorage
       localStorage.setItem("token", response.data.access_token);
       localStorage.setItem("user", JSON.stringify(response.data.user));
 
       // Redirect to home
-      navigate("/");
+      navigate(inviteToken ? "/collaboration" : "/");
     } catch (err) {
       console.error("Signup error:", err);
       setError(err.response?.data?.detail || "Signup failed. Please try again.");

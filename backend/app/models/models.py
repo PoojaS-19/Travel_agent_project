@@ -20,6 +20,12 @@ class User(Base):
     bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")
     preferences = relationship("UserPreference", back_populates="user", cascade="all, delete-orphan")
     search_history = relationship("SearchHistory", back_populates="user", cascade="all, delete-orphan")
+    trip_collaborations = relationship("TripCollaborator", foreign_keys="TripCollaborator.user_id", back_populates="user", cascade="all, delete-orphan")
+    trip_suggestions = relationship("TripSuggestion", back_populates="created_by")
+    suggestion_votes = relationship("SuggestionVote", back_populates="user", cascade="all, delete-orphan")
+    suggestion_reactions = relationship("SuggestionReaction", back_populates="user", cascade="all, delete-orphan")
+    suggestion_comments = relationship("SuggestionComment", back_populates="user", cascade="all, delete-orphan")
+    trip_notifications = relationship("TripNotification", foreign_keys="TripNotification.recipient_user_id", back_populates="recipient", cascade="all, delete-orphan")
 
 
 class Flight(Base):
@@ -110,6 +116,10 @@ class Itinerary(Base):
 
     # Relationships
     user = relationship("User", back_populates="itineraries")
+    collaborators = relationship("TripCollaborator", back_populates="trip", cascade="all, delete-orphan")
+    invitations = relationship("TripInvitation", back_populates="trip", cascade="all, delete-orphan")
+    suggestions = relationship("TripSuggestion", back_populates="trip", cascade="all, delete-orphan")
+    notifications = relationship("TripNotification", back_populates="trip", cascade="all, delete-orphan")
 
     # Index hint: user_id
 

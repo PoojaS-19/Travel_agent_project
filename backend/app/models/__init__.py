@@ -11,7 +11,21 @@ from app.models.models import (
     TrainType,
     BookingStatus,
     BookingType,
-    SearchType
+    SearchType,
+)
+from app.models.collaboration import (
+    CollaboratorRole,
+    InvitationStatus,
+    NotificationType,
+    SuggestionComment,
+    SuggestionReaction,
+    SuggestionType,
+    SuggestionVote,
+    TripCollaborator,
+    TripInvitation,
+    TripNotification,
+    TripSuggestion,
+    VoteValue,
 )
 
 __all__ = [
@@ -27,5 +41,17 @@ __all__ = [
     "TrainType",
     "BookingStatus",
     "BookingType",
-    "SearchType"
+    "SearchType",
+    "CollaboratorRole",
+    "InvitationStatus",
+    "NotificationType",
+    "SuggestionComment",
+    "SuggestionReaction",
+    "SuggestionType",
+    "SuggestionVote",
+    "TripCollaborator",
+    "TripInvitation",
+    "TripNotification",
+    "TripSuggestion",
+    "VoteValue",
 ]

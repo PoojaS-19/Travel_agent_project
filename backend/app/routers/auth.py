@@ -16,6 +16,7 @@ from app.models.schemas import (
     UserResponse,
 )
 from app.services.auth_service import AuthService
+from app.services.collaboration_service import CollaborationService
 from datetime import timedelta
 from typing import Optional
 
@@ -126,6 +127,17 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    if user_data.invite_token:
+        try:
+            CollaborationService(db).accept_invitation(user_data.invite_token, new_user.id)
+        except HTTPException:
+            raise
+        except Exception as invite_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Account created, but invite acceptance failed: {invite_error}"
+            )
     
     # Generate JWT token
     access_token = AuthService.create_access_token(

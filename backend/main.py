@@ -23,11 +23,6 @@ from app.services.recommendation_service import RecommendationService
 # Load .env once
 load_dotenv()
 
-# Debug print (keep for testing)
-print("GOOGLE:", os.getenv("GOOGLE_API_KEY"))
-print("GEMINI:", os.getenv("GEMINI_API_KEY"))
-print("AMADEUS KEY:", os.getenv("AMADEUS_API_KEY"))
-print("AMADEUS SECRET:", os.getenv("AMADEUS_API_SECRET"))
 print("Database Connection: MySQL configured")
 
 app = FastAPI()
@@ -47,9 +42,9 @@ async def startup_event():
     """Create database tables on startup"""
     try:
         Base.metadata.create_all(bind=engine)
-        print("✓ Database tables created/verified successfully")
+        print("Database tables created/verified successfully")
     except Exception as e:
-        print(f"✗ Warning: Could not create database tables: {e}")
+        print(f"Warning: Could not create database tables: {e}")
         print("Please check your MySQL connection credentials in .env file")
 
 
@@ -128,11 +123,14 @@ from app.routes.train_routes import router as train_router
 from app.routers.auth import router as auth_router, get_optional_user_id, get_current_user_id
 from app.routers.hotels import router as hotels_router
 from app.routers.reviews import router as reviews_router
+from app.routers.collaboration import router as collaboration_router, websocket_trip_endpoint
 
 app.include_router(auth_router)
 app.include_router(train_router, prefix="/api")
 app.include_router(hotels_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
+app.include_router(collaboration_router)
+app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)
 
 
 # ----------------------------- FLIGHTS -----------------------------

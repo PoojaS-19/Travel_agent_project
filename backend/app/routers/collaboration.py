@@ -1,0 +1,276 @@
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
+from jose import JWTError
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal, get_db
+from app.models.collaboration_schemas import (
+    CollaborationDashboardResponse,
+    CommentCreate,
+    CommentResponse,
+    DecisionSummaryResponse,
+    InvitationAcceptRequest,
+    InvitationAcceptResponse,
+    InvitationCreate,
+    InvitationResponse,
+    MemberRoleUpdate,
+    NotificationResponse,
+    Pagination,
+    ReactionToggle,
+    SuggestionCreate,
+    SuggestionListResponse,
+    SuggestionResponse,
+    TripVotingStateUpdate,
+    VoteUpsert,
+)
+from app.repositories.collaboration_repository import CollaborationRepository
+from app.routers.auth import get_current_user_id
+from app.services.auth_service import AuthService
+from app.services.collaboration_service import CollaborationService
+from app.websocket_manager import trip_ws_manager
+from app.models.collaboration import TripNotification
+
+
+router = APIRouter(prefix="/api", tags=["Trip Collaboration"])
+
+
+@router.get("/trips/{trip_id}/collaboration/dashboard", response_model=CollaborationDashboardResponse)
+def collaboration_dashboard(trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    repo = CollaborationRepository(db)
+    me = service.require_member(trip_id, user_id)
+    owner = service.ensure_owner_membership(trip_id)
+    suggestions, _ = repo.list_suggestions(trip_id, None, 1, 8)
+    return CollaborationDashboardResponse(
+        trip_id=trip_id,
+        my_role=service._role_value(me.role),
+        voting_locked=bool(owner.voting_locked),
+        finalized_at=owner.finalized_at,
+        members=[service.serialize_collaborator(member) for member in repo.list_collaborators(trip_id)],
+        pending_invitations=[service.serialize_invitation(invite) for invite in repo.list_pending_invitations(trip_id)],
+        recent_suggestions=service.serialize_suggestions(suggestions, user_id),
+        unread_notifications=repo.unread_count(user_id, trip_id),
+    )
+
+
+@router.post("/trips/{trip_id}/collaboration/invitations", response_model=list[InvitationResponse])
+async def create_invitations(payload: InvitationCreate, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    invitations = service.create_invitations(trip_id, user_id, [str(email) for email in payload.emails], payload.role)
+    await trip_ws_manager.broadcast(trip_id, "invite_sent", {"count": len(invitations)})
+    return invitations
+
+
+@router.post("/trips/{trip_id}/collaboration/invitations/{invitation_id}/resend", response_model=InvitationResponse)
+async def resend_invite(invitation_id: int, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    repo = CollaborationRepository(db)
+    service.require_owner(trip_id, user_id)
+    invitation = repo.get_invitation(trip_id, invitation_id)
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    response = service.create_invitations(trip_id, user_id, [invitation.email], service._role_value(invitation.role))[0]
+    await trip_ws_manager.broadcast(trip_id, "invite_sent", {"invitation_id": invitation_id, "resent": True})
+    return response
+
+
+@router.delete("/trips/{trip_id}/collaboration/invitations/{invitation_id}", status_code=204)
+async def revoke_invite(invitation_id: int, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    CollaborationService(db).revoke_invitation(trip_id, invitation_id, user_id)
+    await trip_ws_manager.broadcast(trip_id, "invite_revoked", {"invitation_id": invitation_id})
+    return None
+
+
+@router.post("/collaboration/invitations/accept", response_model=InvitationAcceptResponse)
+async def accept_invite(payload: InvitationAcceptRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    collaborator = service.accept_invitation(payload.token, user_id)
+    response = service.serialize_collaborator(collaborator)
+    await trip_ws_manager.broadcast(collaborator.trip_id, "member_joined", jsonable_encoder(response))
+    return InvitationAcceptResponse(trip_id=collaborator.trip_id, collaborator=response, message="Invitation accepted")
+
+
+@router.patch("/trips/{trip_id}/collaboration/members/{collaborator_id}", response_model=dict)
+async def update_member_role(payload: MemberRoleUpdate, collaborator_id: int, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    collaborator = CollaborationService(db).update_member_role(trip_id, user_id, collaborator_id, payload.role)
+    await trip_ws_manager.broadcast(trip_id, "member_updated", {"collaborator_id": collaborator.id, "role": payload.role})
+    return {"message": "Role updated"}
+
+
+@router.delete("/trips/{trip_id}/collaboration/members/{collaborator_id}", status_code=204)
+async def remove_member(collaborator_id: int, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    CollaborationService(db).remove_member(trip_id, user_id, collaborator_id)
+    await trip_ws_manager.broadcast(trip_id, "member_removed", {"collaborator_id": collaborator_id})
+    return None
+
+
+@router.patch("/trips/{trip_id}/collaboration/voting", response_model=dict)
+async def set_voting_state(payload: TripVotingStateUpdate, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    CollaborationService(db).set_voting_lock(trip_id, user_id, payload.voting_locked)
+    await trip_ws_manager.broadcast(trip_id, "trip_updated", {"voting_locked": payload.voting_locked})
+    return {"message": "Voting state updated", "voting_locked": payload.voting_locked}
+
+
+@router.post("/trips/{trip_id}/collaboration/suggestions", response_model=SuggestionResponse)
+async def create_suggestion(payload: SuggestionCreate, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    suggestion = service.create_suggestion(trip_id, user_id, payload)
+    response = service.serialize_suggestions([suggestion], user_id)[0]
+    await trip_ws_manager.broadcast(trip_id, "suggestion_added", jsonable_encoder(response))
+    return response
+
+
+@router.get("/trips/{trip_id}/collaboration/suggestions", response_model=SuggestionListResponse)
+def list_suggestions(
+    trip_id: int,
+    suggestion_type: Optional[str] = Query(None, pattern="^(destination|hotel|restaurant|activity)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    service = CollaborationService(db)
+    service.require_member(trip_id, user_id)
+    repo = CollaborationRepository(db)
+    items, total = repo.list_suggestions(trip_id, suggestion_type, page, page_size)
+    return SuggestionListResponse(
+        items=service.serialize_suggestions(items, user_id),
+        pagination=Pagination(page=page, page_size=page_size, total=total),
+    )
+
+
+@router.put("/collaboration/suggestions/{suggestion_id}/vote", response_model=dict)
+async def upsert_vote(payload: VoteUpsert, suggestion_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    vote = service.upsert_vote(suggestion_id, user_id, payload.vote_value, payload.ranking)
+    suggestion = CollaborationRepository(db).get_suggestion(suggestion_id)
+    response = service.serialize_suggestions([suggestion], user_id)[0]
+    await trip_ws_manager.broadcast(suggestion.trip_id, "vote_updated", {"suggestion": jsonable_encoder(response)})
+    return {"message": "Vote updated", "vote_id": vote.id, "suggestion": response}
+
+
+@router.post("/collaboration/suggestions/{suggestion_id}/reactions", response_model=dict)
+async def toggle_reaction(payload: ReactionToggle, suggestion_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    result = service.toggle_reaction(suggestion_id, user_id, payload.emoji)
+    suggestion = CollaborationRepository(db).get_suggestion(suggestion_id)
+    await trip_ws_manager.broadcast(suggestion.trip_id, "reaction_updated", {"suggestion_id": suggestion_id, **result})
+    return result
+
+
+@router.post("/collaboration/suggestions/{suggestion_id}/comments", response_model=CommentResponse)
+async def add_comment(payload: CommentCreate, suggestion_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    comment = CollaborationService(db).add_comment(suggestion_id, user_id, payload.body, payload.parent_id)
+    username = comment.user.username if comment.user else None
+    response = CommentResponse(
+        id=comment.id,
+        suggestion_id=comment.suggestion_id,
+        parent_id=comment.parent_id,
+        user_id=comment.user_id,
+        body=comment.body,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+        username=username,
+    )
+    suggestion = CollaborationRepository(db).get_suggestion(suggestion_id)
+    await trip_ws_manager.broadcast(suggestion.trip_id, "comment_added", jsonable_encoder(response))
+    return response
+
+
+@router.get("/collaboration/suggestions/{suggestion_id}/comments", response_model=dict)
+def list_comments(suggestion_id: int, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    repo = CollaborationRepository(db)
+    suggestion = repo.get_suggestion(suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    CollaborationService(db).require_member(suggestion.trip_id, user_id)
+    comments, total = repo.list_comments(suggestion_id, page, page_size)
+    return {
+        "items": [
+            CommentResponse(
+                id=comment.id,
+                suggestion_id=comment.suggestion_id,
+                parent_id=comment.parent_id,
+                user_id=comment.user_id,
+                body=comment.body,
+                created_at=comment.created_at,
+                updated_at=comment.updated_at,
+                username=comment.user.username if comment.user else None,
+            )
+            for comment in comments
+        ],
+        "pagination": Pagination(page=page, page_size=page_size, total=total),
+    }
+
+
+@router.post("/trips/{trip_id}/collaboration/finalize/{suggestion_id}", response_model=SuggestionResponse)
+async def finalize_suggestion(suggestion_id: int, trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    suggestion = service.finalize_suggestion(trip_id, user_id, suggestion_id)
+    response = service.serialize_suggestions([suggestion], user_id)[0]
+    await trip_ws_manager.broadcast(trip_id, "trip_finalized", jsonable_encoder(response))
+    return response
+
+
+@router.get("/trips/{trip_id}/collaboration/decisions", response_model=DecisionSummaryResponse)
+def decision_summary(trip_id: int, budget_target: Optional[Decimal] = None, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    summary = service.decision_summary(trip_id, user_id, budget_target)
+    return DecisionSummaryResponse(budget_target=budget_target, **summary)
+
+
+@router.get("/collaboration/notifications", response_model=dict)
+def list_notifications(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), unread_only: bool = False, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    repo = CollaborationRepository(db)
+    items, total = repo.list_notifications(user_id, page, page_size, unread_only)
+    return {
+        "items": [
+            NotificationResponse(
+                id=item.id,
+                trip_id=item.trip_id,
+                notification_type=CollaborationService._role_value(item.notification_type),
+                title=item.title,
+                message=item.message,
+                payload=item.payload,
+                read_at=item.read_at,
+                created_at=item.created_at,
+            )
+            for item in items
+        ],
+        "pagination": Pagination(page=page, page_size=page_size, total=total),
+    }
+
+
+@router.post("/collaboration/notifications/{notification_id}/read", response_model=dict)
+def mark_notification_read(notification_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    notification = db.query(TripNotification).filter_by(id=notification_id, recipient_user_id=user_id).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notification.read_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Notification marked as read"}
+
+
+async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str = Query(...)):
+    db = SessionLocal()
+    try:
+        try:
+            payload = AuthService.decode_token(token)
+            user_id = int(payload.get("sub"))
+        except (JWTError, TypeError, ValueError):
+            await websocket.close(code=1008)
+            return
+        CollaborationService(db).require_member(trip_id, user_id)
+        await trip_ws_manager.connect(trip_id, websocket)
+        await trip_ws_manager.broadcast(trip_id, "presence", {"user_id": user_id, "status": "online"})
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        trip_ws_manager.disconnect(trip_id, websocket)
+        await trip_ws_manager.broadcast(trip_id, "presence", {"status": "offline"})
+    finally:
+        db.close()

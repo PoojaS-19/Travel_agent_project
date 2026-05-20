@@ -10,6 +10,7 @@ class UserSignup(BaseModel):
     username: str
     email: EmailStr
     password: str
+    invite_token: Optional[str] = None
     
     class Config:
         example = {
