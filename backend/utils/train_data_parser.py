@@ -58,6 +58,27 @@ def process_file(filepath, train_type):
                 dest_station.get("day", "1")
             )
             
+            parsed_route = []
+            for idx, stop in enumerate(route_info):
+                station_fullname = stop.get("stationName", "")
+                if " - " in station_fullname:
+                    parts = station_fullname.split(" - ")
+                    station_name = parts[0].strip()
+                    station_code = parts[1].strip()
+                else:
+                    station_name = station_fullname.strip()
+                    station_code = station_fullname.strip()
+                
+                parsed_route.append({
+                    "sequence": int(stop.get("sno", idx + 1)),
+                    "station_name": station_name,
+                    "station_code": station_code,
+                    "arrival": stop.get("arrives", ""),
+                    "departure": stop.get("departs", ""),
+                    "day": int(stop.get("day", "1")),
+                    "distance": stop.get("distance", "0 kms")
+                })
+            
             normalized_data.append({
                 "train_no": train.get("trainNumber", ""),
                 "name": train.get("trainName", ""),
@@ -67,7 +88,8 @@ def process_file(filepath, train_type):
                 "arrival": arrival,
                 "duration": duration,
                 "type": train_type,
-                "runningDays": train.get("runningDays", {})
+                "runningDays": train.get("runningDays", {}),
+                "route": parsed_route
             })
         except Exception as e:
             # Skip trains that cause errors during parsing

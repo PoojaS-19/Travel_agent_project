@@ -65,7 +65,26 @@ class Train(Base):
     running_days = Column(JSON, nullable=True)  # {"MON": true, "TUE": false}
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Index hint: source, destination
+    # Relationships
+    stops = relationship("TrainStop", back_populates="train", cascade="all, delete-orphan")
+
+
+class TrainStop(Base):
+    __tablename__ = "train_stops"
+
+    id = Column(Integer, primary_key=True, index=True)
+    train_id = Column(Integer, ForeignKey("trains.id", ondelete="CASCADE"), nullable=False)
+    station_code = Column(String(20), nullable=False, index=True)
+    station_name = Column(String(100), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False)
+    arrival = Column(String(20), nullable=True)
+    departure = Column(String(20), nullable=True)
+    day = Column(Integer, nullable=False, default=1)
+    distance = Column(String(20), nullable=True)
+
+    # Relationships
+    train = relationship("Train", back_populates="stops")
+
 
 
 class Hotel(Base):

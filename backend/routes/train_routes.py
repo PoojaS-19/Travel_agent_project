@@ -11,7 +11,7 @@ from app.models import Train, TrainType, TrainStop
 router = APIRouter(prefix="/trains", tags=["Trains"])
 
 # Legacy JSON path for data migration
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "data", "all_trains.json")
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "all_trains.json")
 
 async def migrate_trains_from_json(db: Session):
     """One-time migration to load trains and stops from JSON into database"""
@@ -182,16 +182,6 @@ def search_trains(
     src_stop = aliased(TrainStop)
     dest_stop = aliased(TrainStop)
     
-    # Check if 'source' and 'destination' correspond to exact station codes
-    source_upper = source.upper()
-    dest_upper = destination.upper()
-    
-    source_is_code = db.query(TrainStop.id).filter(TrainStop.station_code == source_upper).first() is not None
-    dest_is_code = db.query(TrainStop.id).filter(TrainStop.station_code == dest_upper).first() is not None
-    
-    src_filter = (src_stop.station_code == source_upper) if source_is_code else (src_stop.station_name.ilike(f"%{source}%"))
-    dest_filter = (dest_stop.station_code == dest_upper) if dest_is_code else (dest_stop.station_name.ilike(f"%{destination}%"))
-    
     # Query trains going through both stops where source comes before destination
     query = db.query(
         Train, 
@@ -207,8 +197,8 @@ def search_trains(
         join(src_stop, Train.id == src_stop.train_id).\
         join(dest_stop, Train.id == dest_stop.train_id).\
         filter(
-            src_filter,
-            dest_filter,
+            (src_stop.station_name.ilike(f"%{source}%")) | (src_stop.station_code.ilike(f"{source}")),
+            (dest_stop.station_name.ilike(f"%{destination}%")) | (dest_stop.station_code.ilike(f"{destination}")),
             src_stop.sequence < dest_stop.sequence
         )
         
