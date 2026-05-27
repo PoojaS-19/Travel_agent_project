@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../api";
 import "../App.css";
 
@@ -20,6 +21,7 @@ const emptyActivityForm = {
 };
 
 export default function SavedTripsPage() {
+  const navigate = useNavigate();
   const [trips, setTrips] = useState([]);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
@@ -214,20 +216,32 @@ export default function SavedTripsPage() {
           ) : (
             <div className="saved-trip-list">
               {trips.map((trip) => (
-                <button
+                <div
                   key={trip.id}
                   className={`saved-trip-list-item ${selectedTrip?.id === trip.id ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedTrip(trip);
-                    setIsEditing(false);
-                    cancelEditingActivity();
-                    setMessage("");
-                  }}
                 >
-                  <strong>{trip.destination || "Untitled Trip"}</strong>
-                  <span>{trip.start_city || "Starting city not set"}</span>
-                  <small>{new Date(trip.created_at).toLocaleDateString()}</small>
-                </button>
+                  <button
+                    type="button"
+                    className="saved-trip-list-main"
+                    onClick={() => {
+                      setSelectedTrip(trip);
+                      setIsEditing(false);
+                      cancelEditingActivity();
+                      setMessage("");
+                    }}
+                  >
+                    <strong>{trip.destination || "Untitled Trip"}</strong>
+                    <span>{trip.start_city || "Starting city not set"}</span>
+                    <small>{new Date(trip.created_at).toLocaleDateString()}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="saved-trip-card-collaborate"
+                    onClick={() => navigate(`/collaborate/${trip.id}`)}
+                  >
+                    Collaborate
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -259,6 +273,12 @@ export default function SavedTripsPage() {
                     className="saved-trip-primary-btn"
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={() => navigate(`/collaborate/${selectedTrip.id}`)}
+                    className="saved-trip-secondary-btn"
+                  >
+                    Collaborate
                   </button>
                   <button
                     onClick={() => deleteTrip(selectedTrip.id)}

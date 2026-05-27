@@ -35,7 +35,12 @@ export default function LoginPage() {
       navigate("/");
     } catch (err) {
       console.error("Login error:", err);
-      setError(err.response?.data?.detail || "Login failed. Please try again.");
+      if (err.response?.status === 403 && err.response?.data?.detail?.verification_code) {
+        const { email, verification_code } = err.response.data.detail;
+        navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(verification_code)}`);
+      } else {
+        setError(err.response?.data?.detail || "Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

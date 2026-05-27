@@ -19,6 +19,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 RESET_TOKEN_EXPIRE_MINUTES = 15
 password_reset_tokens = {}
+email_verification_codes = {}
 
 
 class AuthService:
@@ -103,3 +104,21 @@ class AuthService:
 
         password_reset_tokens.pop(email, None)
         return True
+
+    @staticmethod
+    def generate_verification_code(email: str) -> str:
+        """Generate a random 6-digit OTP and store it in memory"""
+        import random
+        code = f"{random.randint(100000, 999999)}"
+        email_verification_codes[email] = code
+        return code
+
+    @staticmethod
+    def verify_email_code(email: str, code: str) -> bool:
+        """Verify the 6-digit OTP code for the email"""
+        stored_code = email_verification_codes.get(email)
+        if stored_code and stored_code == code:
+            # Consume the code
+            email_verification_codes.pop(email, None)
+            return True
+        return False

@@ -6,6 +6,7 @@ import FlightsPage from "./pages/FlightsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import SavedTripsPage from "./pages/SavedTripsPage";
 import CollaborationDashboard from "./pages/CollaborationDashboard";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
@@ -56,7 +57,6 @@ export default function App() {
           <Link to="/">Home</Link>
           <Link to="/itinerary">Itinerary</Link>
           <Link to="/saved-trips">Saved Trips</Link>
-          <Link to="/collaboration">Collaborate</Link>
           <Link to="/hotels">Hotels</Link>
           <Link to="/restaurants">Restaurants</Link>
           <Link to="/flights">Flights</Link>
@@ -93,9 +93,11 @@ export default function App() {
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/saved-trips" element={<SavedTripsPage />} />
-        <Route path="/collaboration" element={<CollaborationDashboard />} />
+        <Route path="/collaborate" element={<CollaborationDashboard />} />
+        <Route path="/collaborate/:tripId" element={<CollaborationDashboard />} />
         <Route path="/collaboration/accept" element={<AcceptInvitePage />} />
 
         <Route

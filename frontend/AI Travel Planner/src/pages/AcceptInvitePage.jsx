@@ -24,7 +24,7 @@ export default function AcceptInvitePage() {
       try {
         const response = await api.post("/api/collaboration/invitations/accept", { token });
         setStatus("Invite accepted. Opening collaboration room...");
-        navigate(`/collaboration?tripId=${response.data.trip_id}`);
+        navigate(`/collaborate/${response.data.trip_id}`);
       } catch (err) {
         setStatus(err.response?.data?.detail || "Could not accept this invite.");
       }

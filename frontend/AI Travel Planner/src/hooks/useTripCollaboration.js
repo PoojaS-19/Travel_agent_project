@@ -9,7 +9,10 @@ export default function useTripCollaboration(tripId) {
   const [error, setError] = useState("");
 
   const loadAll = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId) {
+      setError("Invalid trip selected");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -22,7 +25,14 @@ export default function useTripCollaboration(tripId) {
       setSuggestions(suggestionsRes.data.items || []);
       setDecisions(decisionsRes.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Unable to load collaboration data");
+      const status = err.response?.status;
+      if (status === 404) {
+        setError("Trip not found");
+      } else if (status === 403) {
+        setError("You do not have access to this trip");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -47,12 +57,14 @@ export default function useTripCollaboration(tripId) {
   }, [tripId, loadAll]);
 
   const inviteMembers = async (emails, role) => {
+    if (!tripId) throw new Error("Invalid trip selected");
     const response = await api.post(`/api/trips/${tripId}/collaboration/invitations`, { emails, role });
     await loadAll();
     return response.data;
   };
 
   const addSuggestion = async (payload) => {
+    if (!tripId) throw new Error("Invalid trip selected");
     const optimistic = {
       id: `tmp-${Date.now()}`,
       ...payload,
@@ -108,6 +120,7 @@ export default function useTripCollaboration(tripId) {
   };
 
   const setVotingLocked = async (voting_locked) => {
+    if (!tripId) throw new Error("Invalid trip selected");
     await api.patch(`/api/trips/${tripId}/collaboration/voting`, { voting_locked });
     await loadAll();
   };

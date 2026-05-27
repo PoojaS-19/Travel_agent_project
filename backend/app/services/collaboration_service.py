@@ -1,4 +1,5 @@
 import hashlib
+import os
 import secrets
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -35,7 +36,7 @@ from app.repositories.collaboration_repository import CollaborationRepository
 from app.services.email_service import EmailService
 
 
-CLIENT_BASE_URL = "http://localhost:5173"
+CLIENT_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 INVITE_EXPIRE_DAYS = 7
 
 
@@ -114,7 +115,13 @@ class CollaborationService:
             email=user.email if user else None,
         )
 
-    def serialize_invitation(self, invitation: TripInvitation, raw_token: Optional[str] = None) -> InvitationResponse:
+    def serialize_invitation(
+        self,
+        invitation: TripInvitation,
+        raw_token: Optional[str] = None,
+        email_sent: bool = False,
+        email_error: Optional[str] = None,
+    ) -> InvitationResponse:
         invite_link = f"{CLIENT_BASE_URL}/collaboration/accept?token={raw_token}" if raw_token else None
         return InvitationResponse(
             id=invitation.id,
@@ -125,6 +132,8 @@ class CollaborationService:
             expires_at=invitation.expires_at,
             accepted_at=invitation.accepted_at,
             invite_link=invite_link,
+            email_sent=email_sent,
+            email_error=email_error,
         )
 
     def _vote_counts(self, suggestion_ids: Iterable[int]) -> Dict[int, Dict[str, object]]:
@@ -306,8 +315,8 @@ class CollaborationService:
                 self.db.add(invitation)
             self.db.flush()
             invite_link = f"{CLIENT_BASE_URL}/collaboration/accept?token={token}"
-            EmailService.send_trip_invitation(email, trip.destination or f"Trip #{trip.id}", inviter.username, invite_link)
-            responses.append(self.serialize_invitation(invitation, token))
+            delivery = EmailService.send_trip_invitation(email, trip.destination or f"Trip #{trip.id}", inviter.username, invite_link)
+            responses.append(self.serialize_invitation(invitation, token, delivery.sent, delivery.error))
 
         self.db.commit()
         return responses

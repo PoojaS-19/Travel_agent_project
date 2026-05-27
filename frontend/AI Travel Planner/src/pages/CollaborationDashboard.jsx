@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import ActivityRanking from "../components/collaboration/ActivityRanking";
 import DecisionSummary from "../components/collaboration/DecisionSummary";
 import InviteMembersModal from "../components/collaboration/InviteMembersModal";
@@ -9,27 +9,20 @@ import useTripCollaboration from "../hooks/useTripCollaboration";
 import "./CollaborationDashboard.css";
 
 export default function CollaborationDashboard() {
-  const [searchParams] = useSearchParams();
-  const initialTripId = searchParams.get("tripId") || "";
-  const [tripId, setTripId] = useState(initialTripId);
-  const [activeTripId, setActiveTripId] = useState(initialTripId);
+  const { tripId } = useParams();
   const [inviteOpen, setInviteOpen] = useState(false);
-  const { dashboard, suggestions, groupedSuggestions, decisions, loading, error, actions } = useTripCollaboration(activeTripId);
+  const { dashboard, suggestions, groupedSuggestions, decisions, loading, error, actions } = useTripCollaboration(tripId);
 
   const canEdit = dashboard?.my_role === "owner" || dashboard?.my_role === "editor";
   const isOwner = dashboard?.my_role === "owner";
   const activities = useMemo(() => groupedSuggestions.activity || [], [groupedSuggestions]);
 
-  if (!activeTripId) {
+  if (!tripId) {
     return (
       <main className="collab-page">
         <section className="trip-picker">
-          <h1>Collaborative trip planning</h1>
-          <p>Enter a saved trip ID to open the shared planning room.</p>
-          <form onSubmit={(event) => { event.preventDefault(); setActiveTripId(tripId); }}>
-            <input value={tripId} onChange={(event) => setTripId(event.target.value)} placeholder="Trip ID" />
-            <button type="submit">Open room</button>
-          </form>
+          <h1>Invalid trip selected</h1>
+          <p>Open collaboration from a saved itinerary.</p>
         </section>
       </main>
     );
@@ -41,9 +34,9 @@ export default function CollaborationDashboard() {
 
       <section className="collab-hero">
         <div>
-          <span className="live-pill">Live room · Trip #{activeTripId}</span>
+          <span className="live-pill">Live room - Trip #{tripId}</span>
           <h1>Plan together</h1>
-          <p>Invite friends, vote on ideas, react to options, and finalize the group’s preferred plan.</p>
+          <p>Invite friends, vote on ideas, react to options, and finalize the group's preferred plan.</p>
         </div>
         <div className="hero-actions">
           <button onClick={() => setInviteOpen(true)} disabled={!isOwner}>Invite</button>

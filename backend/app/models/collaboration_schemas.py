@@ -40,6 +40,8 @@ class InvitationResponse(BaseModel):
     expires_at: datetime
     accepted_at: Optional[datetime] = None
     invite_link: Optional[str] = None
+    email_sent: bool = False
+    email_error: Optional[str] = None
 
     class Config:
         from_attributes = True

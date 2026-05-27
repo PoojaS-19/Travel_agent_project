@@ -297,6 +297,11 @@
   gap: 6px;
 }
 
+.collab-modal form {
+  display: grid;
+  gap: 12px;
+}
+
 .collab-modal textarea {
   min-height: 110px;
 }
@@ -320,6 +325,33 @@
 .collab-loading,
 .empty-state {
   color: #64748b;
+}
+
+.invite-results {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.invite-result {
+  display: grid;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.invite-result span {
+  color: #475569;
+  font-size: 14px;
+}
+
+.invite-result button {
+  justify-self: start;
+  background: #ffffff;
+  color: #1d4ed8;
 }
 
 @media (max-width: 980px) {

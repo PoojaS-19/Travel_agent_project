@@ -28,14 +28,16 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await API.post("/auth/signup", { ...formData, invite_token: inviteToken || undefined });
+      const response = await API.post("/auth/signup", { 
+        ...formData, 
+        invite_token: inviteToken || undefined 
+      });
 
-      // Store token in localStorage
-      localStorage.setItem("token", response.data.access_token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+      const email = response.data.email;
+      const code = response.data.verification_code;
 
-      // Redirect to home
-      navigate(inviteToken ? "/collaboration" : "/");
+      // Redirect to verification page
+      navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`);
     } catch (err) {
       console.error("Signup error:", err);
       setError(err.response?.data?.detail || "Signup failed. Please try again.");

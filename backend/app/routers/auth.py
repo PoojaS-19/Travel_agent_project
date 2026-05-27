@@ -14,6 +14,8 @@ from app.models.schemas import (
     UserLogin,
     TokenResponse,
     UserResponse,
+    SignupResponse,
+    VerifyEmailRequest,
 )
 from app.services.auth_service import AuthService
 from app.services.collaboration_service import CollaborationService
@@ -44,7 +46,7 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
+            detail="Invalid authentication header format",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -93,12 +95,12 @@ def get_optional_user_id(authorization: Optional[str] = Header(None)) -> Optiona
         return None
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     """
     User signup endpoint
     
-    Creates a new user and returns JWT token
+    Creates a new user and returns email verification details
     """
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -121,7 +123,8 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     new_user = User(
         username=user_data.username,
         email=user_data.email,
-        password_hash=hashed_password
+        password_hash=hashed_password,
+        is_verified=False
     )
     
     db.add(new_user)
@@ -139,17 +142,72 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
                 detail=f"Account created, but invite acceptance failed: {invite_error}"
             )
     
+    # Generate verification code
+    verification_code = AuthService.generate_verification_code(new_user.email)
+    
+    return SignupResponse(
+        message="Verification code generated. Use it to verify your email.",
+        verification_code=verification_code,
+        email=new_user.email
+    )
+
+
+@router.post("/verify-email", response_model=TokenResponse)
+def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
+    """
+    Verify user email using the 6-digit OTP code and log them in
+    """
+    # Find user by email
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email"
+        )
+    
+    if user.is_verified:
+        # Already verified, log them in
+        access_token = AuthService.create_access_token(
+            data={"sub": str(user.id)},
+            expires_delta=timedelta(minutes=30)
+        )
+        
+        user_response = UserResponse(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            created_at=user.created_at.isoformat()
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+    
+    # Verify code
+    if not AuthService.verify_email_code(request.email, request.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code"
+        )
+    
+    # Set verified status
+    user.is_verified = True
+    db.commit()
+    db.refresh(user)
+    
     # Generate JWT token
     access_token = AuthService.create_access_token(
-        data={"sub": str(new_user.id)},
+        data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=30)
     )
     
     user_response = UserResponse(
-        id=new_user.id,
-        username=new_user.username,
-        email=new_user.email,
-        created_at=new_user.created_at.isoformat()
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        created_at=user.created_at.isoformat()
     )
     
     return TokenResponse(
@@ -174,6 +232,19 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if email is verified
+    if not user.is_verified:
+        # Generate new verification code
+        verification_code = AuthService.generate_verification_code(user.email)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Email not verified. Please verify your email first.",
+                "verification_code": verification_code,
+                "email": user.email
+            }
         )
     
     # Generate JWT token

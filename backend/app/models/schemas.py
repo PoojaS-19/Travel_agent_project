@@ -32,6 +32,19 @@ class UserLogin(BaseModel):
         }
 
 
+class SignupResponse(BaseModel):
+    """Schema for signup response with verification code"""
+    message: str
+    verification_code: str
+    email: str
+
+
+class VerifyEmailRequest(BaseModel):
+    """Schema for email verification request"""
+    email: EmailStr
+    code: str
+
+
 class ForgotPasswordRequest(BaseModel):
     """Schema for requesting a password reset token"""
     email: EmailStr

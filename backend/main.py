@@ -43,11 +43,21 @@ async def startup_event():
     try:
         Base.metadata.create_all(bind=engine)
         print("Database tables created/verified successfully")
+        
+        # Check and add column is_verified if not exists
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SHOW COLUMNS FROM users LIKE 'is_verified'")).fetchone()
+                if not result:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE"))
+                    conn.commit()
+                    print("Dynamic migration: Added 'is_verified' column to 'users' table")
+        except Exception as alt_err:
+            print(f"Warning: Could not check/add 'is_verified' column to 'users' table: {alt_err}")
+            
     except Exception as e:
         print(f"Warning: Could not create database tables: {e}")
-        print("Please check your MySQL connection credentials in .env file")
-
-
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     return round(
