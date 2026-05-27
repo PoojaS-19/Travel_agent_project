@@ -326,6 +326,10 @@ class CollaborationService:
         if not invitation:
             raise HTTPException(status_code=404, detail="Invitation not found")
         if invitation.status != InvitationStatus.PENDING:
+            if invitation.status == InvitationStatus.ACCEPTED and invitation.accepted_by_user_id == user_id:
+                collaborator = self.repo.get_collaborator(invitation.trip_id, user_id)
+                if collaborator:
+                    return collaborator
             raise HTTPException(status_code=409, detail=f"Invitation is {self._role_value(invitation.status)}")
         if invitation.expires_at <= datetime.utcnow():
             invitation.status = InvitationStatus.EXPIRED

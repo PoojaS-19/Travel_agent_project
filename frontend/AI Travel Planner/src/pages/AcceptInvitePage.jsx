@@ -40,7 +40,7 @@ export default function AcceptInvitePage() {
         {needsAuth && (
           <div className="hero-actions">
             <Link to={`/signup?invite_token=${encodeURIComponent(token)}`}>Sign up</Link>
-            <Link to="/login">Log in</Link>
+            <Link to={`/login?invite_token=${encodeURIComponent(token)}`}>Log in</Link>
           </div>
         )}
       </section>

@@ -8,6 +8,7 @@ export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const emailParam = searchParams.get("email") || "";
   const codeParam = searchParams.get("code") || "";
+  const inviteToken = searchParams.get("invite_token");
 
   const [email, setEmail] = useState(emailParam);
   const [code, setCode] = useState(codeParam);
@@ -38,10 +39,18 @@ export default function VerifyEmailPage() {
       localStorage.setItem("token", response.data.access_token);
       localStorage.setItem("user", JSON.stringify(response.data.user));
 
-      // Trigger user session refresh
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 1500);
+      if (inviteToken) {
+        const inviteResponse = await API.post("/api/collaboration/invitations/accept", {
+          token: inviteToken,
+        });
+        setTimeout(() => {
+          navigate(`/collaborate/${inviteResponse.data.trip_id}`);
+        }, 800);
+      } else {
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 1500);
+      }
     } catch (err) {
       console.error("Verification error:", err);
       setError(err.response?.data?.detail || "Verification failed. Please try again.");

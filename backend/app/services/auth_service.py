@@ -3,15 +3,12 @@ Authentication service for password hashing and JWT token management
 """
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 import os
 import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -28,12 +25,17 @@ class AuthService:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt"""
-        return pwd_context.hash(password)
+        password_bytes = password.encode("utf-8")[:72]
+        return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
     
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash"""
-        return pwd_context.verify(plain_password, hashed_password)
+        try:
+            password_bytes = plain_password.encode("utf-8")[:72]
+            return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+        except (ValueError, TypeError):
+            return False
     
     @staticmethod
     def create_access_token(data: dict, expires_delta: timedelta = None) -> str:

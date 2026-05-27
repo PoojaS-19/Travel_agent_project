@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import API from "../api";
 import "../App.css";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite_token");
   const [formData, setFormData] = useState({
     email: "",
     password: ""
@@ -31,13 +33,20 @@ export default function LoginPage() {
       localStorage.setItem("token", response.data.access_token);
       localStorage.setItem("user", JSON.stringify(response.data.user));
 
-      // Redirect to home
-      navigate("/");
+      if (inviteToken) {
+        const inviteResponse = await API.post("/api/collaboration/invitations/accept", {
+          token: inviteToken,
+        });
+        navigate(`/collaborate/${inviteResponse.data.trip_id}`);
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       console.error("Login error:", err);
       if (err.response?.status === 403 && err.response?.data?.detail?.verification_code) {
         const { email, verification_code } = err.response.data.detail;
-        navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(verification_code)}`);
+        const inviteQuery = inviteToken ? `&invite_token=${encodeURIComponent(inviteToken)}` : "";
+        navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(verification_code)}${inviteQuery}`);
       } else {
         setError(err.response?.data?.detail || "Login failed. Please try again.");
       }
@@ -87,7 +96,12 @@ export default function LoginPage() {
 
         <div className="auth-links">
           <p><Link to="/forgot-password">Forgot password?</Link></p>
-          <p>Don't have an account? <Link to="/signup">Sign up here</Link></p>
+          <p>
+            Don't have an account?{" "}
+            <Link to={inviteToken ? `/signup?invite_token=${encodeURIComponent(inviteToken)}` : "/signup"}>
+              Sign up here
+            </Link>
+          </p>
         </div>
       </div>
     </div>

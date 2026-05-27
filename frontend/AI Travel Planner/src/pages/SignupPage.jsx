@@ -37,7 +37,8 @@ export default function SignupPage() {
       const code = response.data.verification_code;
 
       // Redirect to verification page
-      navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`);
+      const inviteQuery = inviteToken ? `&invite_token=${encodeURIComponent(inviteToken)}` : "";
+      navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}${inviteQuery}`);
     } catch (err) {
       console.error("Signup error:", err);
       setError(err.response?.data?.detail || "Signup failed. Please try again.");
@@ -100,7 +101,12 @@ export default function SignupPage() {
         </form>
 
         <div className="auth-links">
-          <p>Already have an account? <Link to="/login">Login here</Link></p>
+          <p>
+            Already have an account?{" "}
+            <Link to={inviteToken ? `/login?invite_token=${encodeURIComponent(inviteToken)}` : "/login"}>
+              Login here
+            </Link>
+          </p>
         </div>
       </div>
     </div>
