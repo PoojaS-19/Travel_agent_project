@@ -13,6 +13,66 @@ export default function TrainSearchPage() {
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
 
+  // Autocomplete states
+  const [fromSuggestions, setFromSuggestions] = useState([]);
+  const [toSuggestions, setToSuggestions] = useState([]);
+  const [showFromDropdown, setShowFromDropdown] = useState(false);
+  const [showToDropdown, setShowToDropdown] = useState(false);
+
+  const fetchSuggestions = async (query, setSuggestions) => {
+    if (!query || query.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const res = await API.get("/api/trains/stations", {
+        params: { query: query.trim() }
+      });
+      if (res.data && res.data.stations) {
+        setSuggestions(res.data.stations);
+      } else {
+        setSuggestions([]);
+      }
+    } catch (err) {
+      console.error("Error fetching station suggestions:", err);
+      setSuggestions([]);
+    }
+  };
+
+  const handleFromChange = (e) => {
+    const val = e.target.value;
+    setFrom(val);
+    setShowFromDropdown(true);
+    fetchSuggestions(val, setFromSuggestions);
+  };
+
+  const handleToChange = (e) => {
+    const val = e.target.value;
+    setTo(val);
+    setShowToDropdown(true);
+    fetchSuggestions(val, setToSuggestions);
+  };
+
+  const handleSelectFrom = (station) => {
+    setFrom(`${station.name} (${station.code})`);
+    setFromSuggestions([]);
+    setShowFromDropdown(false);
+  };
+
+  const handleSelectTo = (station) => {
+    setTo(`${station.name} (${station.code})`);
+    setToSuggestions([]);
+    setShowToDropdown(false);
+  };
+
+  const cleanSearchTerm = (val) => {
+    if (val.includes(" (") && val.endsWith(")")) {
+      const parts = val.split(" (");
+      return parts[1].replace(")", "").trim();
+    }
+    return val;
+  };
+
   const search = async () => {
     setLoading(true);
     setError("");
@@ -27,8 +87,8 @@ export default function TrainSearchPage() {
     try {
       const res = await API.get("/api/trains", {
         params: { 
-          source: from, 
-          destination: to, 
+          source: cleanSearchTerm(from), 
+          destination: cleanSearchTerm(to), 
           date: date,
           type: type || undefined,
           sort: "departure"
@@ -66,26 +126,74 @@ export default function TrainSearchPage() {
         <p>Find best trains across India</p>
 
         <div className="flight-search-container" style={{ flexWrap: "wrap", justifyContent: "center" }}>
-          <div className="input-with-icon">
+          {/* FROM INPUT WITH AUTOCOMPLETE */}
+          <div className="input-with-icon autocomplete-container">
             <span className="input-icon">🚉</span>
             <input 
               type="text"
               placeholder="From (e.g. Mumbai)"
               value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              onChange={handleFromChange}
+              onFocus={() => {
+                if (from.length >= 2) setShowFromDropdown(true);
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowFromDropdown(false), 200);
+              }}
               style={{ border: "none", outline: "none", background: "transparent", width: "100%" }}
             />
+            {showFromDropdown && fromSuggestions.length > 0 && (
+              <div className="autocomplete-dropdown">
+                {fromSuggestions.map((station, idx) => (
+                  <div 
+                    key={idx} 
+                    className="autocomplete-item"
+                    onMouseDown={() => handleSelectFrom(station)}
+                  >
+                    <span className="autocomplete-station-icon">🚉</span>
+                    <div className="autocomplete-station-info">
+                      <span className="autocomplete-station-name">{station.name}</span>
+                    </div>
+                    <span className="autocomplete-station-code">{station.code}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="input-with-icon">
+          {/* TO INPUT WITH AUTOCOMPLETE */}
+          <div className="input-with-icon autocomplete-container">
             <span className="input-icon">🏁</span>
             <input 
               type="text"
               placeholder="To (e.g. Delhi)"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={handleToChange}
+              onFocus={() => {
+                if (to.length >= 2) setShowToDropdown(true);
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowToDropdown(false), 200);
+              }}
               style={{ border: "none", outline: "none", background: "transparent", width: "100%" }}
             />
+            {showToDropdown && toSuggestions.length > 0 && (
+              <div className="autocomplete-dropdown">
+                {toSuggestions.map((station, idx) => (
+                  <div 
+                    key={idx} 
+                    className="autocomplete-item"
+                    onMouseDown={() => handleSelectTo(station)}
+                  >
+                    <span className="autocomplete-station-icon">🚉</span>
+                    <div className="autocomplete-station-info">
+                      <span className="autocomplete-station-name">{station.name}</span>
+                    </div>
+                    <span className="autocomplete-station-code">{station.code}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="input-with-icon">
@@ -115,6 +223,17 @@ export default function TrainSearchPage() {
           <button className="search-btn-enhanced" onClick={search} style={{ background: "linear-gradient(135deg, #ff5722 0%, #d84315 100%)", boxShadow: "0 8px 20px rgba(216, 67, 21, 0.3)" }}>
             {loading ? "Searching..." : "Search Trains"}
           </button>
+        </div>
+
+        <div style={{ marginTop: "10px" }}>
+          <a 
+            href="https://www.irctc.co.in/nget/train-search" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="irctc-direct-link"
+          >
+            🌐 Go directly to IRCTC Official Site
+          </a>
         </div>
       </div>
 
@@ -168,8 +287,8 @@ export default function TrainSearchPage() {
                   🚆
                 </div>
                 <div>
-                  <div className="airline-name" style={{ fontSize: "18px", fontWeight: "bold" }}>{t.name}</div>
-                  <div style={{ fontSize: "14px", color: "#888" }}>#{t.train_number}</div>
+                  <div className="airline-name" style={{ fontSize: "18px", fontWeight: "bold", textAlign: "left" }}>{t.name}</div>
+                  <div style={{ fontSize: "14px", color: "#888", textAlign: "left" }}>#{t.train_number}</div>
                 </div>
               </div>
               <div style={{ background: "#e3f2fd", color: "#1976d2", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold" }}>
