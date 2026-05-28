@@ -10,6 +10,28 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
+    
+    // Public authentication endpoints that do not require validation
+    const publicPaths = [
+      "/auth/login",
+      "/auth/signup",
+      "/auth/verify-email",
+      "/auth/forgot-password",
+      "/auth/reset-password"
+    ];
+    
+    const isPublic = publicPaths.some((path) => config.url && config.url.includes(path));
+
+    if (!token && !isPublic) {
+      // Clear storage just in case and redirect to login
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+      return Promise.reject(new Error("Unauthorized: Authentication token is missing."));
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

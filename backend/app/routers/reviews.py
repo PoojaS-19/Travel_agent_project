@@ -59,7 +59,8 @@ def add_review(
 @router.get("/{destination}")
 def get_reviews_by_destination(
     destination: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Get all reviews for a destination"""
     try:
@@ -89,7 +90,8 @@ def get_reviews_by_destination(
 @router.post("/community-recommendations")
 def get_community_recommendations(
     request: CommunityRecommendationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Get community-driven place recommendations"""
     try:

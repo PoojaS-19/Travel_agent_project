@@ -7,6 +7,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models import Train, TrainType, TrainStop
+from app.routers.auth import get_current_user_id
 
 router = APIRouter(prefix="/trains", tags=["Trains"])
 
@@ -144,7 +145,8 @@ def calculate_dynamic_duration(dep_time_str, arr_time_str, dep_day, arr_day):
 @router.get("/stations")
 def search_stations(
     query: str = Query(..., min_length=2, description="Search term for station name or code"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Search distinct stations by name or code for autocomplete suggestions
@@ -173,7 +175,8 @@ def search_trains(
     type: Optional[str] = Query(None, description="Train type (Express, Passenger, Superfast)"),
     sort: Optional[str] = Query(None, description="Sort by 'departure' or 'duration'"),
     date: Optional[str] = Query(None, description="Date of journey (YYYY-MM-DD)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Search trains from database where source and destination are intermediate stops in sequence

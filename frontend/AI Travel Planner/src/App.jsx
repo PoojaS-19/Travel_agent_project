@@ -11,6 +11,7 @@ import SavedTripsPage from "./pages/SavedTripsPage";
 import CollaborationDashboard from "./pages/CollaborationDashboard";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
 import FloatingChatbot from "./components/FloatingChatbot";
+import ProtectedRoute from "./components/ProtectedRoute";
 import "./App.css";
 import TrainSearchPage from "./pages/TrainSearchPage";
 import BusSearchPage from "./pages/BusSearchPage";
@@ -95,45 +96,49 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/saved-trips" element={<SavedTripsPage />} />
-        <Route path="/collaborate" element={<CollaborationDashboard />} />
-        <Route path="/collaborate/:tripId" element={<CollaborationDashboard />} />
-        <Route path="/collaboration/accept" element={<AcceptInvitePage />} />
+        
+        {/* Protected Feature Routes */}
+        <Route path="/saved-trips" element={<ProtectedRoute><SavedTripsPage /></ProtectedRoute>} />
+        <Route path="/collaborate" element={<ProtectedRoute><CollaborationDashboard /></ProtectedRoute>} />
+        <Route path="/collaborate/:tripId" element={<ProtectedRoute><CollaborationDashboard /></ProtectedRoute>} />
+        <Route path="/collaboration/accept" element={<ProtectedRoute><AcceptInvitePage /></ProtectedRoute>} />
 
         <Route
           path="/itinerary"
           element={
-            <ItineraryPage
-              language={language}
-              chatItinerary={chatItinerary}
-              chatDailyPlans={chatDailyPlans}
-            />
+            <ProtectedRoute>
+              <ItineraryPage
+                language={language}
+                chatItinerary={chatItinerary}
+                chatDailyPlans={chatDailyPlans}
+              />
+            </ProtectedRoute>
           }
         />
 
         <Route
           path="/flights"
-          element={<FlightsPage language={language} />}
+          element={<ProtectedRoute><FlightsPage language={language} /></ProtectedRoute>}
         />
 
         <Route
           path="/hotels"
-          element={<HotelsPage language={language} />}
+          element={<ProtectedRoute><HotelsPage language={language} /></ProtectedRoute>}
         />
 
         <Route
           path="/restaurants"
-          element={<RestaurantsPage language={language} />}
+          element={<ProtectedRoute><RestaurantsPage language={language} /></ProtectedRoute>}
         />
 
         <Route
           path="/trainsearch"
-          element={<TrainSearchPage language={language} />}
+          element={<ProtectedRoute><TrainSearchPage language={language} /></ProtectedRoute>}
         />
 
         <Route
           path="/bussearch"
-          element={<BusSearchPage language={language} />}
+          element={<ProtectedRoute><BusSearchPage language={language} /></ProtectedRoute>}
         />
       </Routes>
     </BrowserRouter>

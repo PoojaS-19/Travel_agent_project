@@ -8,6 +8,12 @@ export default function HotelsPage() {
   const [loading, setLoading] = useState(false);
 
   const getHotels = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
     if (!city.trim()) {
       alert("Please enter a city name.");
       return;

@@ -24,6 +24,11 @@ export default function TrainSearchPage() {
       setSuggestions([]);
       return;
     }
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     try {
       const res = await API.get("/api/trains/stations", {
         params: { query: query.trim() }
@@ -74,6 +79,11 @@ export default function TrainSearchPage() {
   };
 
   const search = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     setLoading(true);
     setError("");
     setTrains([]);

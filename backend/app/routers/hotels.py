@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 import requests
 from app.services.google_maps import get_places, get_place_photos, GOOGLE_API_KEY
+from app.routers.auth import get_current_user_id
 
 router = APIRouter()
 
 @router.get("/hotels")
-def get_hotels(city: str):
+def get_hotels(city: str, user_id: int = Depends(get_current_user_id)):
     if not city or not city.strip():
         raise HTTPException(status_code=400, detail="City query is required")
     
@@ -16,7 +17,7 @@ def get_hotels(city: str):
     return results
 
 @router.get("/restaurants")
-def get_restaurants(city: str):
+def get_restaurants(city: str, user_id: int = Depends(get_current_user_id)):
     if not city or not city.strip():
         raise HTTPException(status_code=400, detail="City query is required")
     
@@ -24,7 +25,7 @@ def get_restaurants(city: str):
     return results
 
 @router.get("/place-image")
-def get_place_image(place: str, index: int = 0):
+def get_place_image(place: str, index: int = 0, user_id: int = Depends(get_current_user_id)):
     """Fetch a single place photo by index."""
     if not place:
         raise HTTPException(status_code=400, detail="Place required")
@@ -40,7 +41,7 @@ def get_place_image(place: str, index: int = 0):
     raise HTTPException(status_code=404, detail="No image found")
 
 @router.get("/place-image-count")
-def get_place_image_count(place: str):
+def get_place_image_count(place: str, user_id: int = Depends(get_current_user_id)):
     """Returns how many photos are available for a place (max 3)."""
     if not place:
         return {"count": 0}

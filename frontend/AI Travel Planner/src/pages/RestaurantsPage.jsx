@@ -8,6 +8,12 @@ export default function RestaurantsPage() {
   const [loading, setLoading] = useState(false);
 
   const getRestaurants = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
     if (!city) return;
     setLoading(true);
     try {

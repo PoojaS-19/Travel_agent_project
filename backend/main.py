@@ -157,7 +157,7 @@ app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)
 
 # ----------------------------- FLIGHTS -----------------------------
 @app.get("/flights")
-def get_flights(source: str, destination: str, departure: str, return_date: str, db: Session = Depends(get_db)):
+def get_flights(source: str, destination: str, departure: str, return_date: str, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     """
     Search for flights - tries database first, then Amadeus API, then generates mock data
     """
@@ -264,7 +264,7 @@ def get_flights(source: str, destination: str, departure: str, return_date: str,
 
 # ----------------------------- HOTELS -----------------------------
 @app.get("/hotels")
-def get_hotels(city: str):
+def get_hotels(city: str, user_id: int = Depends(get_current_user_id)):
     if not city or not city.strip():
         return {"error": "City query is required"}
 
@@ -285,7 +285,7 @@ def get_hotels(city: str):
 
 # ----------------------------- RESTAURANTS -----------------------------
 @app.get("/restaurants")
-def get_restaurants(city: str):
+def get_restaurants(city: str, user_id: int = Depends(get_current_user_id)):
     url = (
         f"https://maps.googleapis.com/maps/api/place/textsearch/json?"
         f"query=restaurants+in+{city}&key={GOOGLE_API_KEY}"
@@ -296,7 +296,7 @@ def get_restaurants(city: str):
 
 # ----------------------------- PLACE IMAGE -----------------------------
 @app.get("/place-image")
-def get_place_image(place: str, index: int = 0):
+def get_place_image(place: str, index: int = 0, user_id: int = Depends(get_current_user_id)):
     """Fetch a single place photo by index (0, 1, 2...). Uses Google Places photo_reference."""
     if not place:
         return {"error": "Place required"}
@@ -329,7 +329,7 @@ def get_place_image(place: str, index: int = 0):
 
 
 @app.get("/place-image-count")
-def get_place_image_count(place: str):
+def get_place_image_count(place: str, user_id: int = Depends(get_current_user_id)):
     """Returns how many photos are available for a place (max 3)."""
     if not place:
         return {"count": 0}
@@ -350,7 +350,7 @@ def get_place_image_count(place: str):
 
 #------------------------------Nearby Places -----------------------------
 @app.post("/nearby")
-def nearby_places(data: dict):
+def nearby_places(data: dict, user_id: int = Depends(get_current_user_id)):
     lat = data.get("lat")
     lon = data.get("lon")
 
@@ -389,7 +389,7 @@ def nearby_places(data: dict):
     return results
 #------------------------------Emergency------------------------------
 @app.post("/emergency")
-def emergency(data: dict):
+def emergency(data: dict, user_id: int = Depends(get_current_user_id)):
     lat = data.get("lat")
     lon = data.get("lon")
 
@@ -456,7 +456,7 @@ from datetime import datetime, timedelta
 async def generate_itinerary(
     details: dict,
     db: Session = Depends(get_db),
-    user_id: Optional[int] = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     Expects JSON body like:
@@ -761,7 +761,7 @@ async def delete_saved_itinerary(
 async def get_recommendations(
     language: str = "English",
     db: Session = Depends(get_db),
-    user_id: Optional[int] = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Get personalized itinerary recommendations based on user history. Falls back to generic suggestions for anonymous or new users."""
     try:
@@ -777,7 +777,7 @@ async def get_recommendations(
 async def travel_chatbot(
     data: dict,
     db: Session = Depends(get_db),
-    user_id: Optional[int] = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     lat = data.get("lat")
     lon = data.get("lon")
@@ -934,7 +934,7 @@ Now respond to the user's latest message as JSON:
 async def travel_chatbot_stream(
     data: dict,
     db: Session = Depends(get_db),
-    user_id: Optional[int] = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Streaming version of chatbot using Server-Sent Events."""
     lat = data.get("lat")
@@ -1081,7 +1081,7 @@ class IncidentRequest(BaseModel):
 
 
 @app.post("/incident-itinerary")
-def incident_itinerary(req: IncidentRequest):
+def incident_itinerary(req: IncidentRequest, user_id: int = Depends(get_current_user_id)):
     now = datetime.now()
     hospital = nearest_hospital(req.lat, req.lon)
     if not hospital:
@@ -1155,7 +1155,7 @@ The JSON structure must be exactly:
 
 # ----------------------------- BUSES -----------------------------
 @app.get("/buses")
-def get_buses(source: str, destination: str, date: str):
+def get_buses(source: str, destination: str, date: str, user_id: int = Depends(get_current_user_id)):
     print(f"Searching buses: {source} -> {destination} on {date}")
     import random
     from datetime import datetime, timedelta

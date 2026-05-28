@@ -265,6 +265,11 @@ function ReviewForm({ place, destination, onClose }) {
   const [loading, setLoading] = useState(false);
 
   const submitReview = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     setLoading(true);
     try {
       await API.post("/api/reviews", {
@@ -381,6 +386,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   }, [chatDailyPlans]);
 
   const submit = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     setLoading(true);
     setResult("");
     setDailyPlans([]);
@@ -569,6 +579,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   };
 
   const handleAltClick = async (altName) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     setAltModal({ isOpen: true, place: altName, loading: true, text: "" });
     try {
       const res = await API.post("/chatbot", {
@@ -582,6 +597,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   };
 
   const fetchSavedItineraries = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
     try {
       const res = await API.get("/itineraries");
       setSavedItineraries(res.data.itineraries || []);
