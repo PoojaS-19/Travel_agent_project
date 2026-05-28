@@ -44,7 +44,7 @@ export default function VerifyEmailPage() {
           token: inviteToken,
         });
         setTimeout(() => {
-          navigate(`/collaborate/${inviteResponse.data.trip_id}`);
+          window.location.href = `/collaborate/${inviteResponse.data.trip_id}`;
         }, 800);
       } else {
         setTimeout(() => {
@@ -66,13 +66,6 @@ export default function VerifyEmailPage() {
         <p style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}>
           We've sent a 6-digit verification code to your email. Please enter it below.
         </p>
-
-        {codeParam && (
-          <div className="reset-code-box" style={{ marginBottom: "20px" }}>
-            <span>Verification code (Demo helper)</span>
-            <strong>{codeParam}</strong>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           {!emailParam && (

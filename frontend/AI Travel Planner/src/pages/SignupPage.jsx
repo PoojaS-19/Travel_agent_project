@@ -34,11 +34,10 @@ export default function SignupPage() {
       });
 
       const email = response.data.email;
-      const code = response.data.verification_code;
 
       // Redirect to verification page
       const inviteQuery = inviteToken ? `&invite_token=${encodeURIComponent(inviteToken)}` : "";
-      navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}${inviteQuery}`);
+      navigate(`/verify-email?email=${encodeURIComponent(email)}${inviteQuery}`);
     } catch (err) {
       console.error("Signup error:", err);
       setError(err.response?.data?.detail || "Signup failed. Please try again.");

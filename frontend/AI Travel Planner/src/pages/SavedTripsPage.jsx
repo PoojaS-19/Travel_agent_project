@@ -241,6 +241,11 @@ export default function SavedTripsPage() {
                   >
                     Collaborate
                   </button>
+                  {trip.is_shared && (
+                    <small className="saved-trip-shared-badge">
+                      Shared with you - {trip.collaboration_role}
+                    </small>
+                  )}
                 </div>
               ))}
             </div>
@@ -262,30 +267,39 @@ export default function SavedTripsPage() {
                 <div>
                   <p className="saved-trip-kicker">{selectedTrip.language || "English"} itinerary</p>
                   <h2>{selectedTrip.destination || "Untitled Trip"}</h2>
+                  {selectedTrip.is_shared && (
+                    <p className="saved-trip-shared-note">
+                      Shared with you as {selectedTrip.collaboration_role}. Open Collaborate to plan with the group.
+                    </p>
+                  )}
                   <p>
                     From {selectedTrip.start_city || "not specified"} · Saved{" "}
                     {new Date(selectedTrip.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="saved-trip-actions">
-                  <button
-                    onClick={() => startEditing(selectedTrip)}
-                    className="saved-trip-primary-btn"
-                  >
-                    Edit
-                  </button>
+                  {selectedTrip.can_edit !== false && (
+                    <button
+                      onClick={() => startEditing(selectedTrip)}
+                      className="saved-trip-primary-btn"
+                    >
+                      Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => navigate(`/collaborate/${selectedTrip.id}`)}
                     className="saved-trip-secondary-btn"
                   >
                     Collaborate
                   </button>
-                  <button
-                    onClick={() => deleteTrip(selectedTrip.id)}
-                    className="saved-trip-danger-btn"
-                  >
-                    Delete
-                  </button>
+                  {selectedTrip.can_edit !== false && (
+                    <button
+                      onClick={() => deleteTrip(selectedTrip.id)}
+                      className="saved-trip-danger-btn"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -377,19 +391,22 @@ export default function SavedTripsPage() {
                               <strong>{activity.place_name || "Activity"}</strong>
                               <p>{activity.description || "No description available."}</p>
                               <small>{activity.category || "Travel"}{activity.cost ? ` · ${activity.cost}` : ""}</small>
-                              <button
-                                type="button"
-                                className="saved-trip-inline-btn"
-                                onClick={() => startEditingActivity(
-                                  selectedTrip.daily_plans.indexOf(day),
-                                  index,
-                                  activity
-                                )}
-                              >
-                                Edit Place
-                              </button>
+                              {selectedTrip.can_edit !== false && (
+                                <button
+                                  type="button"
+                                  className="saved-trip-inline-btn"
+                                  onClick={() => startEditingActivity(
+                                    selectedTrip.daily_plans.indexOf(day),
+                                    index,
+                                    activity
+                                  )}
+                                >
+                                  Edit Place
+                                </button>
+                              )}
 
-                              {editingActivity?.dayIndex === selectedTrip.daily_plans.indexOf(day)
+                              {selectedTrip.can_edit !== false
+                                && editingActivity?.dayIndex === selectedTrip.daily_plans.indexOf(day)
                                 && editingActivity?.activityIndex === index && (
                                 <form onSubmit={saveActivity} className="saved-place-edit-form">
                                   <div className="saved-trip-form-row">

@@ -37,16 +37,16 @@ export default function LoginPage() {
         const inviteResponse = await API.post("/api/collaboration/invitations/accept", {
           token: inviteToken,
         });
-        navigate(`/collaborate/${inviteResponse.data.trip_id}`);
+        window.location.href = `/collaborate/${inviteResponse.data.trip_id}`;
       } else {
-        navigate("/");
+        window.location.href = "/";
       }
     } catch (err) {
       console.error("Login error:", err);
       if (err.response?.status === 403 && err.response?.data?.detail?.verification_code) {
-        const { email, verification_code } = err.response.data.detail;
+        const { email } = err.response.data.detail;
         const inviteQuery = inviteToken ? `&invite_token=${encodeURIComponent(inviteToken)}` : "";
-        navigate(`/verify-email?email=${encodeURIComponent(email)}&code=${encodeURIComponent(verification_code)}${inviteQuery}`);
+        navigate(`/verify-email?email=${encodeURIComponent(email)}${inviteQuery}`);
       } else {
         setError(err.response?.data?.detail || "Login failed. Please try again.");
       }

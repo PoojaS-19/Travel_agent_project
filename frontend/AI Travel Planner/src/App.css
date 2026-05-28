@@ -3248,6 +3248,20 @@ body {
   cursor: pointer;
 }
 
+.saved-trip-shared-badge {
+  display: inline-block;
+  margin-top: 10px;
+  color: #116149;
+  background: #e5f7ef;
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
+.saved-trip-shared-note {
+  color: #116149;
+  font-weight: 600;
+}
+
 .saved-trip-detail {
   padding: 28px;
   min-height: 640px;
@@ -3660,4 +3674,3 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
-

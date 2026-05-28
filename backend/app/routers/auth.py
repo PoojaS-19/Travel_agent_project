@@ -19,6 +19,7 @@ from app.models.schemas import (
 )
 from app.services.auth_service import AuthService
 from app.services.collaboration_service import CollaborationService
+from app.services.email_service import EmailService
 from datetime import timedelta
 from typing import Optional
 
@@ -145,9 +146,12 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     # Generate verification code
     verification_code = AuthService.generate_verification_code(new_user.email)
     
+    # Send actual email verification code via SMTP
+    EmailService.send_verification_otp(new_user.email, verification_code)
+    
     return SignupResponse(
-        message="Verification code generated. Use it to verify your email.",
-        verification_code=verification_code,
+        message="Verification code sent to your email. Please check your inbox.",
+        verification_code="sent_to_email",
         email=new_user.email
     )
 
@@ -238,11 +242,13 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     if not user.is_verified:
         # Generate new verification code
         verification_code = AuthService.generate_verification_code(user.email)
+        # Send actual email verification code via SMTP
+        EmailService.send_verification_otp(user.email, verification_code)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
-                "message": "Email not verified. Please verify your email first.",
-                "verification_code": verification_code,
+                "message": "Email not verified. Please check your inbox for a verification code.",
+                "verification_code": "sent_to_email",
                 "email": user.email
             }
         )

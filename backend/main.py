@@ -16,7 +16,7 @@ from typing import Optional
 # Database imports
 from app.database import engine, get_db, Base
 from app.models.schemas import ItineraryUpdate
-from app.models import Flight, Train, Itinerary, SearchHistory, SearchType
+from app.models import Flight, Train, Itinerary, SearchHistory, SearchType, TripCollaborator
 from app.services.database_service import FlightService, TrainService, ItineraryService, SearchHistoryService
 from app.services.recommendation_service import RecommendationService
 
@@ -107,6 +107,18 @@ def serialize_itinerary(itinerary: Itinerary) -> dict:
         "language": itinerary.language,
         "created_at": itinerary.created_at.isoformat(),
     }
+
+
+def serialize_itinerary_with_access(itinerary: Itinerary, user_id: int, role: str = None) -> dict:
+    data = serialize_itinerary(itinerary)
+    access_role = role or ("owner" if itinerary.user_id == user_id else "viewer")
+    data.update({
+        "owner_user_id": itinerary.user_id,
+        "collaboration_role": access_role,
+        "is_shared": itinerary.user_id != user_id,
+        "can_edit": itinerary.user_id == user_id,
+    })
+    return data
 
 
 # ------------------ CONFIGURE GEMINI ------------------
@@ -650,9 +662,31 @@ async def get_saved_itineraries(
     Get all saved itineraries for the authenticated user
     """
     try:
-        itineraries = ItineraryService.get_user_itineraries(db, user_id)
+        owned_itineraries = ItineraryService.get_user_itineraries(db, user_id)
+        shared_rows = (
+            db.query(Itinerary, TripCollaborator.role)
+            .join(TripCollaborator, TripCollaborator.trip_id == Itinerary.id)
+            .filter(
+                TripCollaborator.user_id == user_id,
+                Itinerary.user_id != user_id,
+            )
+            .order_by(TripCollaborator.joined_at.desc())
+            .all()
+        )
+        itineraries = [
+            serialize_itinerary_with_access(itinerary, user_id, "owner")
+            for itinerary in owned_itineraries
+        ]
+        itineraries.extend(
+            serialize_itinerary_with_access(
+                itinerary,
+                user_id,
+                role.value if hasattr(role, "value") else str(role),
+            )
+            for itinerary, role in shared_rows
+        )
         return {
-            "itineraries": [serialize_itinerary(it) for it in itineraries]
+            "itineraries": itineraries
         }
     except Exception as e:
         print("ERROR fetching itineraries:", e)
@@ -667,10 +701,19 @@ async def get_saved_itinerary(
 ):
     """Get a single saved itinerary for the authenticated user."""
     itinerary = ItineraryService.get_user_itinerary(db, user_id, itinerary_id)
+    access_role = "owner"
+    if not itinerary:
+        collaborator = db.query(TripCollaborator).filter(
+            TripCollaborator.trip_id == itinerary_id,
+            TripCollaborator.user_id == user_id,
+        ).first()
+        if collaborator:
+            itinerary = db.query(Itinerary).filter(Itinerary.id == itinerary_id).first()
+            access_role = collaborator.role.value if hasattr(collaborator.role, "value") else str(collaborator.role)
     if not itinerary:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Itinerary not found")
-    return serialize_itinerary(itinerary)
+    return serialize_itinerary_with_access(itinerary, user_id, access_role)
 
 
 @app.put("/itineraries/{itinerary_id}")

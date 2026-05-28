@@ -71,3 +71,20 @@ class EmailService:
     @classmethod
     def send_notification(cls, to_email: str, title: str, message: str) -> EmailDeliveryResult:
         return cls.send_email(to_email, title, f"<p>{message}</p>", message)
+
+    @classmethod
+    def send_verification_otp(cls, to_email: str, otp_code: str) -> EmailDeliveryResult:
+        subject = "Verify your email for TripAI Travel"
+        text_body = f"Your 6-digit verification code is: {otp_code}"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:500px;margin:auto;border:1px solid #e2e8f0;padding:20px;border-radius:8px">
+          <h2 style="color:#2563eb;text-align:center">Verify Your Email</h2>
+          <p>Thank you for signing up with <strong>TripAI Travel</strong>!</p>
+          <p>Please enter the following 6-digit verification code to complete your registration:</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px;font-size:24px;font-weight:bold;letter-spacing:4px;text-align:center;color:#1e3a8a;border-radius:6px;margin:20px 0">
+            {otp_code}
+          </div>
+          <p style="font-size:12px;color:#64748b">If you did not request this code, you can safely ignore this email.</p>
+        </div>
+        """
+        return cls.send_email(to_email, subject, html_body, text_body)
