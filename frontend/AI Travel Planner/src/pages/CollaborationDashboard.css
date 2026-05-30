@@ -366,3 +366,150 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* New custom styles for map, expenses, and simulator */
+.map-container-wrapper {
+  margin: 20px auto;
+  max-width: 1180px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.map-container-wrapper h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.leaflet-container {
+  height: 380px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  z-index: 1;
+}
+
+.simulator-panel {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.simulator-panel h4 {
+  margin: 0 0 10px 0;
+  color: #b91c1c;
+}
+
+.simulator-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.expense-section {
+  max-width: 1180px;
+  margin: 20px auto;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.expense-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .expense-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.expense-list-container,
+.expense-split-container {
+  border: 1px solid #f1f5f9;
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.expense-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.expense-table th,
+.expense-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+.expense-table th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.split-summary-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.split-summary-item {
+  text-align: center;
+}
+
+.split-summary-item strong {
+  display: block;
+  font-size: 18px;
+}
+
+.splits-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+}
+
+.splits-list li {
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.splits-list li strong {
+  color: #2563eb;
+}
+
+.expense-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.expense-form-row {
+  display: flex;
+  gap: 10px;
+}
+
+.expense-form-row input {
+  flex: 1;
+}

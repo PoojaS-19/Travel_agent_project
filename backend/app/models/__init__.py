@@ -27,6 +27,9 @@ from app.models.collaboration import (
     TripNotification,
     TripSuggestion,
     VoteValue,
+    TripExpense,
+    TripVisit,
+    LeaderLocation,
 )
 
 __all__ = [
@@ -56,4 +59,7 @@ __all__ = [
     "TripNotification",
     "TripSuggestion",
     "VoteValue",
+    "TripExpense",
+    "TripVisit",
+    "LeaderLocation",
 ]

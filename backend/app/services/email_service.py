@@ -106,3 +106,23 @@ class EmailService:
         </div>
         """
         return cls.send_email(to_email, subject, html_body, text_body)
+
+    @classmethod
+    def send_collaboration_otp(cls, to_email: str, trip_name: str, inviter_name: str, otp_code: str) -> EmailDeliveryResult:
+        subject = f"Verification Code to join trip to {trip_name}"
+        text_body = (
+            f"{inviter_name} invited you to join the trip '{trip_name}' as a buddy.\n"
+            f"Your 6-digit verification code is: {otp_code}"
+        )
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:500px;margin:auto;border:1px solid #e2e8f0;padding:20px;border-radius:8px">
+          <h2 style="color:#2563eb;text-align:center">Join Trip Collaboration</h2>
+          <p><strong>{inviter_name}</strong> has invited you to join their trip to <strong>{trip_name}</strong>!</p>
+          <p>Please enter the following 6-digit verification code in the app to join the trip:</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px;font-size:24px;font-weight:bold;letter-spacing:4px;text-align:center;color:#1e3a8a;border-radius:6px;margin:20px 0">
+            {otp_code}
+          </div>
+          <p>This code will expire in 7 days.</p>
+        </div>
+        """
+        return cls.send_email(to_email, subject, html_body, text_body)

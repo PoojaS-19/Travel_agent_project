@@ -63,6 +63,20 @@ async def startup_event():
     try:
         Base.metadata.create_all(bind=engine)
         print("Database tables created/verified successfully")
+        
+        # Run dynamic migration to add otp_code to trip_invitations
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN otp_code VARCHAR(6)"))
+                    conn.commit()
+                    print("Dynamic migration: Added 'otp_code' column to 'trip_invitations'")
+                except Exception:
+                    # Column already exists or other error
+                    pass
+        except Exception as alt_err:
+            print(f"Warning: Could not alter trip_invitations table: {alt_err}")
     except Exception as e:
         print(f"Warning: Could not create database tables: {e}")
 
@@ -634,9 +648,10 @@ Now generate the JSON for the user's inputs.
             data = json.loads(clean_content)
 
             # Persist itinerary for authenticated users
+            itinerary_id = None
             if user_id and isinstance(data, dict) and data.get("itinerary_text") and data.get("daily_plans"):
                 try:
-                    ItineraryService.create_itinerary(
+                    itinerary_db = ItineraryService.create_itinerary(
                         db=db,
                         user_id=user_id,
                         start_city=start_city,
@@ -645,10 +660,13 @@ Now generate the JSON for the user's inputs.
                         daily_plans=data.get("daily_plans", []),
                         language=language,
                     )
+                    itinerary_id = itinerary_db.id
                 except Exception as save_error:
                     print("Failed to save itinerary:", save_error)
 
-            return data # Returns dict with itinerary_text and daily_plans
+            if itinerary_id:
+                data["id"] = itinerary_id
+            return data # Returns dict with id, itinerary_text and daily_plans
         except Exception as e:
             print("Failed to parse JSON:", e)
             print("Raw content:", generated_content)
