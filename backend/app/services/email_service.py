@@ -88,3 +88,21 @@ class EmailService:
         </div>
         """
         return cls.send_email(to_email, subject, html_body, text_body)
+
+    @classmethod
+    def send_password_reset_otp(cls, to_email: str, reset_token: str) -> EmailDeliveryResult:
+        subject = "Reset your password for TripAI Travel"
+        text_body = f"Your password reset code is: {reset_token}"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:500px;margin:auto;border:1px solid #e2e8f0;padding:20px;border-radius:8px">
+          <h2 style="color:#2563eb;text-align:center">Reset Your Password</h2>
+          <p>We received a request to reset the password for your <strong>TripAI Travel</strong> account.</p>
+          <p>Please enter the following reset code in the app to proceed with resetting your password:</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px;font-size:24px;font-weight:bold;letter-spacing:4px;text-align:center;color:#1e3a8a;border-radius:6px;margin:20px 0">
+            {reset_token}
+          </div>
+          <p>This code will expire in 15 minutes.</p>
+          <p style="font-size:12px;color:#64748b">If you did not request a password reset, you can safely ignore this email.</p>
+        </div>
+        """
+        return cls.send_email(to_email, subject, html_body, text_body)

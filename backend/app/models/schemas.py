@@ -45,6 +45,11 @@ class VerifyEmailRequest(BaseModel):
     code: str
 
 
+class ResendOTPRequest(BaseModel):
+    """Schema for requesting a new email verification code"""
+    email: EmailStr
+
+
 class ForgotPasswordRequest(BaseModel):
     """Schema for requesting a password reset token"""
     email: EmailStr
