@@ -6,21 +6,22 @@ from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 load_dotenv()
+print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 
 # MySQL Database Configuration
-SQLALCHEMY_DATABASE_URL = (
-    f"mysql+mysqlconnector://{quote_plus(os.getenv('DB_USER', 'root'))}:"
-    f"{quote_plus(os.getenv('DB_PASSWORD', 'root'))}@"
-    f"{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '3306')}/"
-    f"{os.getenv('DB_NAME', 'travel_planner')}"
-)
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+# SQLALCHEMY_DATABASE_URL = (
+#     f"mysql+mysqlconnector://{quote_plus(os.getenv('DB_USER', 'root'))}:"
+#     f"{quote_plus(os.getenv('DB_PASSWORD', 'root'))}@"
+#     f"{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '3306')}/"
+#     f"{os.getenv('DB_NAME', 'travel_planner')}"
+# )
 
 # Create engine
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-    pool_pre_ping=True,  # Verifies connection before use
-    connect_args={"connection_timeout": int(os.getenv("DB_CONNECTION_TIMEOUT", "5"))},
+    pool_pre_ping=True,
 )
 
 # Session factory
