@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, ForeignKey, DECIMAL, TIME, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, Text, ForeignKey, DECIMAL, TIME, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -39,7 +39,7 @@ class Flight(Base):
     arrival = Column(DateTime, nullable=False)
     source = Column(String(100), nullable=False)
     destination = Column(String(100), nullable=False)
-    api_response = Column(JSON, nullable=True)
+    api_response = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Index hint: source, destination
@@ -63,7 +63,7 @@ class Train(Base):
     arrival = Column(TIME, nullable=False)
     duration = Column(String(20), nullable=True)
     type = Column(Enum(TrainType), nullable=False)
-    running_days = Column(JSON, nullable=True)  # {"MON": true, "TUE": false}
+    running_days = Column(Text, nullable=True)  # {"MON": true, "TUE": false}
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -98,7 +98,7 @@ class Hotel(Base):
     price_level = Column(Integer, nullable=True)  # 1-4
     lat = Column(DECIMAL(10, 8), nullable=True)
     lon = Column(DECIMAL(11, 8), nullable=True)
-    api_response = Column(JSON, nullable=True)
+    api_response = Column(Text, nullable=True)
     city = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -115,7 +115,7 @@ class Restaurant(Base):
     price_level = Column(Integer, nullable=True)
     lat = Column(DECIMAL(10, 8), nullable=True)
     lon = Column(DECIMAL(11, 8), nullable=True)
-    api_response = Column(JSON, nullable=True)
+    api_response = Column(Text, nullable=True)
     city = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -130,7 +130,7 @@ class Itinerary(Base):
     start_city = Column(String(100), nullable=True)
     destination = Column(String(100), nullable=True)
     itinerary_text = Column(String(1000), nullable=True)
-    daily_plans = Column(JSON, nullable=True)
+    daily_plans = Column(Text, nullable=True)
     language = Column(String(20), default="English")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -199,7 +199,7 @@ class SearchHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     search_type = Column(Enum(SearchType), nullable=False)
-    query = Column(JSON, nullable=True)  # {"source": "Delhi", "destination": "Mumbai"}
+    query = Column(Text, nullable=True)  # {"source": "Delhi", "destination": "Mumbai"}
     results_count = Column(Integer, nullable=True)
     searched_at = Column(DateTime, default=datetime.utcnow)
 

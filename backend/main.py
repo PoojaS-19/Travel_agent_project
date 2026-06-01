@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 # Database imports
-from app.database import engine, get_db, Base
+from app.database import engine, get_db, Base, DATABASE_TYPE
 from app.models.schemas import ItineraryUpdate
 from app.models import Flight, Train, Itinerary, SearchHistory, SearchType, TripCollaborator
 from app.services.database_service import FlightService, TrainService, ItineraryService, SearchHistoryService
@@ -23,7 +23,14 @@ from app.services.recommendation_service import RecommendationService
 # Load .env once
 load_dotenv()
 
-print("Database Connection: MySQL configured")
+import os
+from dotenv import load_dotenv
+
+
+
+from fastapi import FastAPI
+from amadeus import Client
+print(f"Database Connection: {DATABASE_TYPE} configured and active")
 
 app = FastAPI()
 
@@ -98,12 +105,19 @@ def get_user_interest_hint(db: Session, user_id: int) -> str:
 
 def serialize_itinerary(itinerary: Itinerary) -> dict:
     """Convert an itinerary model to an API response dict."""
+    import json as _json
+    daily_plans = itinerary.daily_plans
+    if isinstance(daily_plans, str):
+        try:
+            daily_plans = _json.loads(daily_plans)
+        except Exception:
+            daily_plans = []
     return {
         "id": itinerary.id,
         "start_city": itinerary.start_city,
         "destination": itinerary.destination,
         "itinerary_text": itinerary.itinerary_text,
-        "daily_plans": itinerary.daily_plans,
+        "daily_plans": daily_plans,
         "language": itinerary.language,
         "created_at": itinerary.created_at.isoformat(),
     }
@@ -452,6 +466,135 @@ def emergency(data: dict, user_id: int = Depends(get_current_user_id)):
 # ----------------------------- ITINERARY (GEMINI) -----------------------------
 from datetime import datetime, timedelta
 
+
+def build_fallback_itinerary(
+    start_city: str,
+    destination: str,
+    days: int,
+    theme: str = "General",
+    preferences: str = "",
+    start_date: str = None,
+) -> dict:
+    """Return a usable structured itinerary when AI generation is unavailable."""
+    safe_days = max(1, min(int(days or 1), 7))
+    destination_name = destination or "your destination"
+    origin_name = start_city or "your current location"
+
+    try:
+        start_date_obj = datetime.fromisoformat(start_date) if start_date else None
+    except Exception:
+        start_date_obj = None
+
+    # Coordinates are approximate defaults so the UI map can still render.
+    destination_coords = {
+        "mumbai": (19.0760, 72.8777),
+        "alibaug": (18.6414, 72.8722),
+        "goa": (15.2993, 74.1240),
+        "pune": (18.5204, 73.8567),
+        "lonavala": (18.7546, 73.4062),
+        "manali": (32.2432, 77.1892),
+        "delhi": (28.6139, 77.2090),
+        "jaipur": (26.9124, 75.7873),
+        "paris": (48.8566, 2.3522),
+    }
+    lookup_key = destination_name.split(",")[0].strip().lower()
+    base_lat, base_lon = destination_coords.get(lookup_key, (19.0760, 72.8777))
+
+    daily_plans = []
+    summary_lines = []
+    for day_index in range(safe_days):
+        day_number = day_index + 1
+        date_value = (
+            (start_date_obj + timedelta(days=day_index)).date().isoformat()
+            if start_date_obj
+            else None
+        )
+        day_title = f"DAY {day_number}"
+        if date_value:
+            day_title += f" ({date_value})"
+        summary_lines.append(
+            f"{day_title}: Explore {destination_name} with a {theme or 'balanced'} pace."
+        )
+
+        lat_offset = day_index * 0.01
+        lon_offset = day_index * 0.01
+        activities = [
+            {
+                "time": "08:30 AM",
+                "place_name": "Travel and Arrival",
+                "category": "Travel",
+                "lat": base_lat + lat_offset,
+                "lon": base_lon + lon_offset,
+                "description": f"Start from {origin_name} and arrive in {destination_name}. Keep the first leg comfortable, confirm local transport, and leave buffer time for check-in.",
+                "alternatives": ["Private cab", "Public transport"],
+                "cost": "Rs 500-2,000",
+            },
+            {
+                "time": "10:30 AM",
+                "place_name": f"{destination_name} Orientation Walk",
+                "category": "Attraction",
+                "lat": base_lat + lat_offset + 0.006,
+                "lon": base_lon + lon_offset + 0.006,
+                "description": f"Begin with a relaxed orientation walk around central {destination_name}. Focus on the main landmarks, local markets, and easy photo stops before the day gets busy.",
+                "alternatives": ["Local viewpoint", "Heritage lane"],
+                "cost": "Rs 0-300",
+            },
+            {
+                "time": "01:00 PM",
+                "place_name": "Dining Options",
+                "category": "Food",
+                "lat": base_lat + lat_offset + 0.009,
+                "lon": base_lon + lon_offset + 0.004,
+                "description": "Option 1 (Budget): choose a popular local eatery. Option 2 (Comfort): pick a family restaurant near the main area. Option 3 (Premium): reserve a scenic cafe or hotel restaurant.",
+                "alternatives": ["Local thali", "Cafe lunch"],
+                "cost": "Rs 250-1,200",
+            },
+            {
+                "time": "03:00 PM",
+                "place_name": f"{theme or 'Local'} Experience",
+                "category": "Attraction",
+                "lat": base_lat + lat_offset + 0.012,
+                "lon": base_lon + lon_offset + 0.011,
+                "description": f"Use the afternoon for a {theme or 'local'} activity that fits your preferences: {preferences or 'sightseeing, food, and easy exploration'}. Keep transit short and avoid packing too many distant stops together.",
+                "alternatives": ["Museum stop", "Nature stop"],
+                "cost": "Rs 200-800",
+            },
+            {
+                "time": "06:30 PM",
+                "place_name": "Sunset or Evening Area",
+                "category": "Relax",
+                "lat": base_lat + lat_offset + 0.015,
+                "lon": base_lon + lon_offset + 0.014,
+                "description": "Slow down in the evening with a waterfront, viewpoint, garden, or calm public square. This keeps the plan realistic and gives time for photos, snacks, and rest.",
+                "alternatives": ["Viewpoint", "Promenade"],
+                "cost": "Rs 0-400",
+            },
+            {
+                "time": "08:00 PM",
+                "place_name": "Dining Options",
+                "category": "Food",
+                "lat": base_lat + lat_offset + 0.010,
+                "lon": base_lon + lon_offset + 0.016,
+                "description": "Option 1 (Budget): street food or casual local dinner. Option 2 (Comfort): well-rated regional restaurant. Option 3 (Premium): rooftop, beachside, or hotel dining depending on the destination.",
+                "alternatives": ["Street food lane", "Regional restaurant"],
+                "cost": "Rs 300-1,500",
+            },
+        ]
+
+        daily_plans.append({
+            "day": day_number,
+            "date": date_value or "",
+            "activities": activities,
+        })
+
+    return {
+        "itinerary_text": "\n".join(summary_lines),
+        "daily_plans": daily_plans,
+        "source": "fallback",
+        "warning": "AI itinerary generation was unavailable, so a structured fallback plan was created.",
+    }
+
+
 @app.post("/itinerary")
 async def generate_itinerary(
     details: dict,
@@ -644,12 +787,28 @@ Now generate the JSON for the user's inputs.
         except Exception as e:
             print("Failed to parse JSON:", e)
             print("Raw content:", generated_content)
-            # Fallback for plain text if model failed JSON
-            return {"itinerary_text": generated_content, "daily_plans": []}
+            return build_fallback_itinerary(
+                start_city=start_city,
+                destination=destination,
+                days=days,
+                theme=theme,
+                preferences=preferences,
+                start_date=start_date,
+            )
 
     except Exception as e:
         print("ERROR generating itinerary:", e)
-        return {"error": str(e)}
+        try:
+            return build_fallback_itinerary(
+                start_city=details.get("start_city", "your current location"),
+                destination=details.get("destination", "Unknown destination"),
+                days=details.get("days", 1),
+                theme=details.get("theme", "General"),
+                preferences=details.get("preferences", ""),
+                start_date=details.get("start_date"),
+            )
+        except Exception:
+            return {"error": str(e), "itinerary_text": "Unable to generate itinerary.", "daily_plans": []}
 
 
 # ----------------------------- GET SAVED ITINERARIES -----------------------------

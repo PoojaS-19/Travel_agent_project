@@ -10,7 +10,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -114,8 +113,8 @@ class TripSuggestion(Base):
     image_url = Column(String(1000), nullable=True)
     estimated_cost = Column(DECIMAL(10, 2), nullable=True)
     location = Column(String(255), nullable=True)
-    tags = Column(JSON, nullable=True)
-    external_ref = Column(JSON, nullable=True)
+    tags = Column(Text, nullable=True)
+    external_ref = Column(Text, nullable=True)
     is_finalized = Column(Boolean, nullable=False, default=False)
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -204,7 +203,7 @@ class TripNotification(Base):
     notification_type = Column(Enum(NotificationType), nullable=False)
     title = Column(String(200), nullable=False)
     message = Column(String(1000), nullable=True)
-    payload = Column(JSON, nullable=True)
+    payload = Column(Text, nullable=True)
     emailed_at = Column(DateTime, nullable=True)
     read_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
