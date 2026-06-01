@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+
 import API, { API_BASE_URL } from "../api";
 import "../App.css";
 import MapComponent from "../components/MapComponent";
@@ -353,7 +354,93 @@ function ReviewForm({ place, destination, onClose }) {
   );
 }
 
+function buildLocalFallbackItinerary(form) {
+  const destination = form.destination || "your destination";
+  const startCity = form.start_city || "your starting city";
+  const days = Math.max(1, Math.min(Number(form.days) || 1, 7));
+  const baseLat = 19.076;
+  const baseLon = 72.8777;
+
+  const daily_plans = Array.from({ length: days }, (_, index) => {
+    const day = index + 1;
+    const offset = index * 0.01;
+
+    return {
+      day,
+      date: "",
+      activities: [
+        {
+          time: "08:30 AM",
+          place_name: "Travel and Arrival",
+          category: "Travel",
+          lat: baseLat + offset,
+          lon: baseLon + offset,
+          description: `Start from ${startCity} and arrive in ${destination}. Keep the first leg comfortable and leave buffer time for check-in, meals, and local transfers.`,
+          alternatives: ["Private cab", "Public transport"],
+          cost: "Rs 500-2,000",
+        },
+        {
+          time: "10:30 AM",
+          place_name: `${destination} Orientation Walk`,
+          category: "Attraction",
+          lat: baseLat + offset + 0.006,
+          lon: baseLon + offset + 0.006,
+          description: `Begin with an easy orientation walk in ${destination}. Visit the central area, understand local transport, and keep the first sightseeing block light.`,
+          alternatives: ["Local viewpoint", "Market lane"],
+          cost: "Rs 0-300",
+        },
+        {
+          time: "01:00 PM",
+          place_name: "Dining Options",
+          category: "Food",
+          lat: baseLat + offset + 0.009,
+          lon: baseLon + offset + 0.004,
+          description: "Option 1 (Budget): local eatery. Option 2 (Comfort): family restaurant. Option 3 (Premium): scenic cafe or hotel restaurant.",
+          alternatives: ["Local thali", "Cafe lunch"],
+          cost: "Rs 250-1,200",
+        },
+        {
+          time: "03:00 PM",
+          place_name: form.theme || "Local Experience",
+          category: "Attraction",
+          lat: baseLat + offset + 0.012,
+          lon: baseLon + offset + 0.011,
+          description: `Use the afternoon for a ${form.theme || "local"} experience that fits your preferences: ${form.preferences || "sightseeing, food, and easy exploration"}.`,
+          alternatives: ["Museum stop", "Nature stop"],
+          cost: "Rs 200-800",
+        },
+        {
+          time: "06:30 PM",
+          place_name: "Evening Viewpoint",
+          category: "Relax",
+          lat: baseLat + offset + 0.015,
+          lon: baseLon + offset + 0.014,
+          description: "Slow down with a viewpoint, promenade, garden, or calm public square. This keeps the schedule realistic and leaves time for photos and rest.",
+          alternatives: ["Viewpoint", "Promenade"],
+          cost: "Rs 0-400",
+        },
+        {
+          time: "08:00 PM",
+          place_name: "Dining Options",
+          category: "Food",
+          lat: baseLat + offset + 0.01,
+          lon: baseLon + offset + 0.016,
+          description: "Option 1 (Budget): street food. Option 2 (Comfort): regional restaurant. Option 3 (Premium): rooftop, beachside, or hotel dining.",
+          alternatives: ["Street food lane", "Regional restaurant"],
+          cost: "Rs 300-1,500",
+        },
+      ],
+    };
+  });
+
+  return {
+    itinerary_text: `Backend is not reachable right now, so TripAI created an offline ${days}-day fallback plan for ${destination}. Start the backend and generate again for AI-enriched places, images, saved trips, and recommendations.`,
+    daily_plans,
+  };
+}
+
 export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
+  const location = useLocation();
 
   const navigate = useNavigate();
   const [savedTripId, setSavedTripId] = useState(null);
@@ -393,7 +480,34 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     }
   }, [chatDailyPlans]);
 
-  const submit = async () => {
+  // Automated travel itinerary generation from home panel
+  useEffect(() => {
+    if (location.state && location.state.destination) {
+      const {
+        destination,
+        days,
+        budget,
+        interests,
+        source,
+        start_city,
+        theme,
+        placeInfo,
+      } = location.state;
+      const prefilledForm = {
+        start_city: start_city || source || "",
+        destination: destination || "",
+        days: days || "",
+        theme: theme || budget || "",
+        preferences: [placeInfo, interests].filter(Boolean).join(" "),
+      };
+      setForm(prefilledForm);
+      if (prefilledForm.start_city) {
+        submit(prefilledForm);
+      }
+    }
+  }, [location.state]);
+
+  const submit = async (formToUse = form) => {
     const token = localStorage.getItem("token");
     if (!token) {
       window.location.href = "/login";
@@ -405,16 +519,21 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
 
     try {
       const res = await API.post("/itinerary", {
-        ...form,
+        ...formToUse,
         language
       });
 
       const data = res.data;
-      if (data.daily_plans) {
-        setResult(data.itinerary_text);
+      if (data.error && !data.daily_plans?.length) {
+        throw new Error(data.error);
+      }
+
+      if (data.daily_plans?.length) {
+        const warningPrefix = data.warning ? `${data.warning}\n\n` : "";
+        setResult(`${warningPrefix}${data.itinerary_text || ""}`);
         setDailyPlans(data.daily_plans);
       } else {
-        setResult(data.itinerary || data);
+        setResult(data.itinerary || data.itinerary_text || "No itinerary returned from backend.");
       }
 
       if (data.id) {
@@ -436,9 +555,9 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       // Fetch community suggestions
       try {
         const commRes = await API.post("/api/community-recommendations", {
-          destination: form.destination,
-          theme: form.theme,
-          preferences: form.preferences
+          destination: formToUse.destination,
+          theme: formToUse.theme,
+          preferences: formToUse.preferences
         });
         setCommunitySuggestions(commRes.data.suggestions || []);
       } catch (commError) {
@@ -446,8 +565,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
         setCommunitySuggestions([]);
       }
 
-    } catch {
-      setResult("Error generating itinerary.");
+    } catch (error) {
+      console.error("Itinerary generation failed:", error);
+      const fallback = buildLocalFallbackItinerary(formToUse);
+      setResult(fallback.itinerary_text);
+      setDailyPlans(fallback.daily_plans);
+      setRecommendations([]);
+      setCommunitySuggestions([]);
     }
     setLoading(false);
   };

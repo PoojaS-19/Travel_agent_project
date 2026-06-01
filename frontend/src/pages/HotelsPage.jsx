@@ -1,27 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import API from "../api";
 import "../App.css";
 
 export default function HotelsPage() {
+  const location = useLocation();
   const [city, setCity] = useState("");
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const getHotels = async () => {
+  const getHotels = async (cityVal = city) => {
     const token = localStorage.getItem("token");
     if (!token) {
       window.location.href = "/login";
       return;
     }
 
-    if (!city.trim()) {
+    if (!cityVal.trim()) {
       alert("Please enter a city name.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await API.get(`/hotels?city=${encodeURIComponent(city)}`);
+      const res = await API.get(`/hotels?city=${encodeURIComponent(cityVal.trim())}`);
       if (res.data?.error) {
         alert(res.data.error);
         setHotels([]);
@@ -35,6 +37,15 @@ export default function HotelsPage() {
     }
     setLoading(false);
   };
+
+  // Prefill and execute search automatically on home console routing
+  useEffect(() => {
+    if (location.state && location.state.city) {
+      const homeCity = location.state.city;
+      setCity(homeCity);
+      getHotels(homeCity);
+    }
+  }, [location.state]);
 
   return (
     <div className="hotels-page">

@@ -4,6 +4,7 @@ Example service showing how to interact with SQLAlchemy models
 from sqlalchemy.orm import Session
 from app.models import User, Flight, Itinerary, Train, SearchHistory, SearchType
 from datetime import datetime
+import json
 
 
 class UserService:
@@ -43,7 +44,7 @@ class FlightService:
             arrival=arrival,
             source=source,
             destination=destination,
-            api_response=api_response
+            api_response=json.dumps(api_response) if api_response else None
         )
         db.add(flight)
         db.commit()
@@ -102,7 +103,7 @@ class ItineraryService:
             start_city=start_city,
             destination=destination,
             itinerary_text=itinerary_text,
-            daily_plans=daily_plans,
+            daily_plans=json.dumps(daily_plans) if daily_plans else None,
             language=language
         )
         db.add(itinerary)
@@ -151,7 +152,7 @@ class SearchHistoryService:
         search = SearchHistory(
             user_id=user_id,
             search_type=search_type,
-            query=query,
+            query=json.dumps(query) if query else None,
             results_count=results_count
         )
         db.add(search)

@@ -61,7 +61,7 @@ async def migrate_trains_from_json(db: Session):
                             arrival=arrival_time,
                             duration=train_data.get("duration", "N/A"),
                             type=train_data.get("type", "Passenger"),
-                            running_days=train_data.get("runningDays", {})
+                            running_days=json.dumps(train_data.get("runningDays", {}))
                         )
                         db.add(train)
                         db.flush()  # Generates train.id
@@ -245,7 +245,7 @@ def search_trains(
             "duration": duration_str,
             "duration_mins": duration_mins,
             "type": train.type,
-            "running_days": train.running_days,
+            "running_days": json.loads(train.running_days) if isinstance(train.running_days, str) else train.running_days,
             "dep_time_obj": dep_time
         })
         

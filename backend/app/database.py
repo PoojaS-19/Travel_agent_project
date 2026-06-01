@@ -8,14 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 
-# MySQL Database Configuration
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
-# SQLALCHEMY_DATABASE_URL = (
-#     f"mysql+mysqlconnector://{quote_plus(os.getenv('DB_USER', 'root'))}:"
-#     f"{quote_plus(os.getenv('DB_PASSWORD', 'root'))}@"
-#     f"{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '3306')}/"
-#     f"{os.getenv('DB_NAME', 'travel_planner')}"
-# )
+# Unified Database Configuration from Environment
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./travel_planner.db")
 
 # Create engine
 engine = create_engine(

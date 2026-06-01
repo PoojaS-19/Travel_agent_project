@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import ItineraryPage from "./pages/ItineraryPage";
 import HotelsPage from "./pages/HotelsPage";
 import RestaurantsPage from "./pages/RestaurantsPage";
@@ -23,6 +23,7 @@ export default function App() {
   const [chatItinerary, setChatItinerary] = useState("");
   const [chatDailyPlans, setChatDailyPlans] = useState([]);
   const [user, setUser] = useState(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Check for existing user session on app load
   useEffect(() => {
@@ -51,41 +52,71 @@ export default function App() {
       />
 
       {/* NAVBAR */}
-      <nav className="navbar">
-        <div className="logo">TripAI Travel</div>
+      <nav className="navbar-modern">
+        <Link to="/" className="logo-container">
+          <span className="logo-icon">🚀</span>
+          <span className="logo-text">TripAI<span className="logo-subtext">Travel</span></span>
+        </Link>
 
-        <div className="nav-links">
-          <Link to="/">Home</Link>
-          <Link to="/itinerary">Itinerary</Link>
-          <Link to="/saved-trips">Saved Trips</Link>
-          <Link to="/hotels">Hotels</Link>
-          <Link to="/restaurants">Restaurants</Link>
-          <Link to="/flights">Flights</Link>
-          <Link to="/trainsearch">Train</Link>
-          <Link to="/bussearch">Bus</Link>
-
-          {user ? (
-            <>
-              <span className="user-info">Welcome, {user.username}!</span>
-              <button onClick={handleLogout} className="logout-btn">Logout</button>
-            </>
-          ) : (
-            <>
-              <Link to="/login">Login</Link>
-              <Link to="/signup">Sign Up</Link>
-            </>
-          )}
+        <div className="nav-links-container">
+          <Link to="/" className="nav-item">🏠 Home</Link>
+          <Link to="/flights" className="nav-item">✈ Flights</Link>
+          <Link to="/hotels" className="nav-item">🏨 Hotels</Link>
+          <Link to="/trainsearch" className="nav-item">🚆 Trains</Link>
+          <Link to="/bussearch" className="nav-item">🚌 Buses</Link>
+          
+          {/* MORE DROPDOWN */}
+          <div 
+            className="more-dropdown-wrapper"
+            onMouseEnter={() => setShowMoreMenu(true)}
+            onMouseLeave={() => setShowMoreMenu(false)}
+          >
+            <button className="nav-item more-trigger-btn">
+              📦 More <span className="arrow-down">⌵</span>
+            </button>
+            {showMoreMenu && (
+              <div className="more-dropdown-menu">
+                <Link to="/itinerary" className="more-dropdown-item" onClick={() => setShowMoreMenu(false)}>
+                  🗺️ Create Trip with AI
+                </Link>
+                <Link to="/restaurants" className="more-dropdown-item" onClick={() => setShowMoreMenu(false)}>
+                  🍽️ Eat & Dine
+                </Link>
+                <Link to="/saved-trips" className="more-dropdown-item" onClick={() => setShowMoreMenu(false)}>
+                  ⭐ Saved Stays
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
-        <select
-          className="language-select"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-        >
-          <option value="English">English</option>
-          <option value="Hindi">Hindi</option>
-          <option value="Marathi">Marathi</option>
-        </select>
+        <div className="nav-actions-container">
+          {user ? (
+            <div className="user-profile-badge">
+              <div className="user-avatar">{user.username.charAt(0).toUpperCase()}</div>
+              <span className="username-display">{user.username}</span>
+              <button onClick={handleLogout} className="logout-btn-modern">Logout</button>
+            </div>
+          ) : (
+            <div className="auth-buttons-container">
+              <Link to="/login" className="login-btn-nav">Login</Link>
+              <Link to="/signup" className="signup-btn-nav">Sign Up</Link>
+            </div>
+          )}
+
+          <div className="lang-selector-wrapper">
+            <span className="lang-icon">🌐</span>
+            <select
+              className="language-select-modern"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              <option value="English">EN</option>
+              <option value="Hindi">HI</option>
+              <option value="Marathi">MR</option>
+            </select>
+          </div>
+        </div>
       </nav>
 
       {/* ROUTES */}
