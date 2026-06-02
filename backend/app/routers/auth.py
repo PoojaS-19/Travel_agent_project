@@ -157,7 +157,14 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     verification_code = AuthService.generate_verification_code(new_user.email)
     
     # Send actual email verification code via SMTP
-    EmailService.send_verification_otp(new_user.email, verification_code)
+    delivery = EmailService.send_verification_otp(new_user.email, verification_code)
+    if not delivery.sent:
+        db.delete(new_user)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
+        )
     
     return SignupResponse(
         message="Verification code sent to your email. Please check your inbox.",
@@ -254,7 +261,12 @@ def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
     verification_code = AuthService.generate_verification_code(user.email)
     
     # Send actual email verification code via SMTP
-    EmailService.send_verification_otp(user.email, verification_code)
+    delivery = EmailService.send_verification_otp(user.email, verification_code)
+    if not delivery.sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resend verification email: {delivery.error}"
+        )
     
     return {"message": "Verification code resent successfully. Please check your inbox."}
 
@@ -281,7 +293,12 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         # Generate new verification code
         verification_code = AuthService.generate_verification_code(user.email)
         # Send actual email verification code via SMTP
-        EmailService.send_verification_otp(user.email, verification_code)
+        delivery = EmailService.send_verification_otp(user.email, verification_code)
+        if not delivery.sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Email is not verified, and we failed to send a new verification code: {delivery.error}"
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -328,8 +345,13 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
         )
 
     reset_token = AuthService.create_password_reset_token(user.email)
-    EmailService.send_password_reset_otp(user.email, reset_token)
-
+    delivery = EmailService.send_password_reset_otp(user.email, reset_token)
+    if not delivery.sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send password reset email: {delivery.error}"
+        )
+ 
     return ForgotPasswordResponse(
         message="Password reset code sent to your email. Use it within 15 minutes.",
         reset_token=None
@@ -389,3 +411,20 @@ def get_current_user(user_id: int = Depends(get_current_user_id), db: Session = 
         email=user.email,
         created_at=user.created_at.isoformat()
     )
+
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
+@router.get("/all-users")
+def get_all_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "username": u.username
+        }
+        for u in users
+    ]

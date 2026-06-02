@@ -1,9 +1,11 @@
 import os
 import smtplib
+import traceback
 from dataclasses import dataclass
 from email.message import EmailMessage
 from html import unescape
 from typing import Optional
+from dotenv import load_dotenv
 
 
 @dataclass
@@ -15,40 +17,99 @@ class EmailDeliveryResult:
 class EmailService:
     """SMTP email boundary with a development fallback."""
 
-    FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@tripai.local")
-    SMTP_HOST = os.getenv("SMTP_HOST")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-    SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    @classmethod
+    def get_config(cls):
+        # Dynamically load env variables at call-time
+        load_dotenv()
+        from_email = os.getenv("FROM_EMAIL", "noreply@tripai.local")
+        smtp_host = os.getenv("SMTP_HOST")
+        smtp_port_str = os.getenv("SMTP_PORT", "587")
+        smtp_port = int(smtp_port_str) if smtp_port_str.isdigit() else 587
+        smtp_username = os.getenv("SMTP_USERNAME")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+        return {
+            "FROM_EMAIL": from_email,
+            "SMTP_HOST": smtp_host,
+            "SMTP_PORT": smtp_port,
+            "SMTP_USERNAME": smtp_username,
+            "SMTP_PASSWORD": smtp_password,
+            "SMTP_USE_TLS": smtp_use_tls
+        }
 
     @classmethod
     def is_configured(cls) -> bool:
-        return bool(cls.SMTP_HOST and cls.SMTP_USERNAME and cls.SMTP_PASSWORD)
+        config = cls.get_config()
+        return bool(config["SMTP_HOST"] and config["SMTP_USERNAME"] and config["SMTP_PASSWORD"])
+
+    @classmethod
+    def _execute_smtp_send(cls, message: EmailMessage) -> None:
+        config = cls.get_config()
+        smtp_host = config["SMTP_HOST"]
+        smtp_port = config["SMTP_PORT"]
+        smtp_username = config["SMTP_USERNAME"]
+        smtp_password = config["SMTP_PASSWORD"]
+        smtp_use_tls = config["SMTP_USE_TLS"]
+
+        print(f"[SMTP-LOG] Preparing email delivery to {message['To']}")
+        print(f"[SMTP-LOG] Configuration: SMTP_HOST={smtp_host}, SMTP_PORT={smtp_port}, SMTP_USERNAME={smtp_username}, SMTP_USE_TLS={smtp_use_tls}")
+
+        if not smtp_host:
+            raise ValueError("SMTP_HOST is not set")
+
+        print(f"[SMTP-LOG] Attempting connection to {smtp_host}:{smtp_port}...")
+        if smtp_port == 465:
+            print("[SMTP-LOG] Using smtplib.SMTP_SSL connection")
+            smtp_conn = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+        else:
+            print("[SMTP-LOG] Using smtplib.SMTP connection")
+            smtp_conn = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+
+        with smtp_conn as smtp:
+            print(f"[SMTP-LOG] Successfully connected to {smtp_host}:{smtp_port}")
+            
+            ehlo_resp = smtp.ehlo()
+            print(f"[SMTP-LOG] EHLO response: {ehlo_resp}")
+            
+            if smtp_use_tls and smtp_port != 465:
+                print("[SMTP-LOG] Starting TLS session (starttls)...")
+                tls_resp = smtp.starttls()
+                print(f"[SMTP-LOG] STARTTLS response: {tls_resp}")
+                ehlo_resp_post_tls = smtp.ehlo()
+                print(f"[SMTP-LOG] EHLO response after STARTTLS: {ehlo_resp_post_tls}")
+                
+            if smtp_username and smtp_password:
+                print(f"[SMTP-LOG] Attempting authentication for user: {smtp_username}...")
+                login_resp = smtp.login(smtp_username, smtp_password)
+                print(f"[SMTP-LOG] Authentication response: {login_resp}")
+            else:
+                print("[SMTP-LOG] No username/password provided. Skipping authentication.")
+                
+            print(f"[SMTP-LOG] Sending email message from {message['From']} to {message['To']}...")
+            smtp.send_message(message)
+            print("[SMTP-LOG] Email message sent successfully!")
 
     @classmethod
     def send_email(cls, to_email: str, subject: str, html_body: str, text_body: str = "") -> EmailDeliveryResult:
+        config = cls.get_config()
         if not cls.is_configured():
-            print(f"[email:not-configured] from={cls.FROM_EMAIL} to={to_email} subject={subject}")
+            print(f"[email:not-configured] from={config['FROM_EMAIL']} to={to_email} subject={subject}")
             print(text_body or html_body)
             return EmailDeliveryResult(sent=False, error="Email is not configured. Use the invite link below or configure SMTP.")
 
         message = EmailMessage()
-        message["From"] = cls.FROM_EMAIL
+        message["From"] = config["FROM_EMAIL"]
         message["To"] = to_email
         message["Subject"] = subject
         message.set_content(text_body or unescape(html_body))
         message.add_alternative(html_body, subtype="html")
 
         try:
-            with smtplib.SMTP(cls.SMTP_HOST, cls.SMTP_PORT, timeout=15) as smtp:
-                if cls.SMTP_USE_TLS:
-                    smtp.starttls()
-                smtp.login(cls.SMTP_USERNAME, cls.SMTP_PASSWORD)
-                smtp.send_message(message)
+            cls._execute_smtp_send(message)
             return EmailDeliveryResult(sent=True)
         except Exception as exc:
             print(f"[email:failed] to={to_email} subject={subject} error={exc}")
+            traceback.print_exc()
             return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
 
     @classmethod
