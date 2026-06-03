@@ -27,6 +27,17 @@ from typing import Optional
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _verification_response_code(code: str) -> str:
+    """
+    Return the real OTP only for local development when email delivery is not configured.
+    In production/configured email setups, the code is delivered by email instead.
+    """
+    if EmailService.is_configured():
+        return "sent_to_email"
+    print(f"[AUTH-DEV] Email delivery is not configured. Use verification code: {code}")
+    return code
+
+
 def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
     """
     Extract and validate JWT token from Authorization header
@@ -160,22 +171,24 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
         print(f"[SIGNUP-LOG] Generating OTP for email: {new_user.email}")
         verification_code = AuthService.generate_verification_code(new_user.email)
         
-        # Send actual email verification code via SMTP
-        print(f"[SIGNUP-LOG] Calling EmailService.send_verification_otp() for email: {new_user.email} with code: {verification_code}")
-        delivery = EmailService.send_verification_otp(new_user.email, verification_code)
-        print(f"[SIGNUP-LOG] EmailService.send_verification_otp() returned sent={delivery.sent}, error={delivery.error}")
-        
-        if not delivery.sent:
-            db.delete(new_user)
-            db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
-            )
+        response_code = _verification_response_code(verification_code)
+        if EmailService.is_configured():
+            # Send actual email verification code via SMTP/Resend
+            print(f"[SIGNUP-LOG] Calling EmailService.send_verification_otp() for email: {new_user.email} with code: {verification_code}")
+            delivery = EmailService.send_verification_otp(new_user.email, verification_code)
+            print(f"[SIGNUP-LOG] EmailService.send_verification_otp() returned sent={delivery.sent}, error={delivery.error}")
+
+            if not delivery.sent:
+                db.delete(new_user)
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
+                )
         
         return SignupResponse(
             message="Verification code sent to your email. Please check your inbox.",
-            verification_code="sent_to_email",
+            verification_code=response_code,
             email=new_user.email
         )
     except Exception as e:
@@ -271,15 +284,20 @@ def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
     # Generate verification code
     verification_code = AuthService.generate_verification_code(user.email)
     
-    # Send actual email verification code via SMTP
-    delivery = EmailService.send_verification_otp(user.email, verification_code)
-    if not delivery.sent:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to resend verification email: {delivery.error}"
-        )
-    
-    return {"message": "Verification code resent successfully. Please check your inbox."}
+    response_code = _verification_response_code(verification_code)
+    if EmailService.is_configured():
+        # Send actual email verification code via SMTP/Resend
+        delivery = EmailService.send_verification_otp(user.email, verification_code)
+        if not delivery.sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to resend verification email: {delivery.error}"
+            )
+
+    return {
+        "message": "Verification code resent successfully. Please check your inbox.",
+        "verification_code": response_code,
+    }
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -303,18 +321,20 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     if not user.is_verified:
         # Generate new verification code
         verification_code = AuthService.generate_verification_code(user.email)
-        # Send actual email verification code via SMTP
-        delivery = EmailService.send_verification_otp(user.email, verification_code)
-        if not delivery.sent:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Email is not verified, and we failed to send a new verification code: {delivery.error}"
-            )
+        response_code = _verification_response_code(verification_code)
+        if EmailService.is_configured():
+            # Send actual email verification code via SMTP/Resend
+            delivery = EmailService.send_verification_otp(user.email, verification_code)
+            if not delivery.sent:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Email is not verified, and we failed to send a new verification code: {delivery.error}"
+                )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "message": "Email not verified. Please check your inbox for a verification code.",
-                "verification_code": "sent_to_email",
+                "verification_code": response_code,
                 "email": user.email
             }
         )

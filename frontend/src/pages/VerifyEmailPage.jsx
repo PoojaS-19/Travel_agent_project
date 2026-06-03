@@ -19,6 +19,7 @@ export default function VerifyEmailPage() {
   const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [devCode, setDevCode] = useState(codeParam);
 
   const inputRefs = useRef([]);
 
@@ -26,6 +27,8 @@ export default function VerifyEmailPage() {
     if (emailParam) setEmail(emailParam);
     if (codeParam && /^\d{6}$/.test(codeParam)) {
       setOtp(codeParam.split(""));
+      setDevCode(codeParam);
+      setMessage("Development verification code has been filled in for you.");
     }
   }, [emailParam, codeParam]);
 
@@ -142,15 +145,24 @@ export default function VerifyEmailPage() {
     setMessage("");
 
     try {
-      await API.post("/auth/resend-otp", {
+      const response = await API.post("/auth/resend-otp", {
         email: email.trim(),
       });
 
-      setMessage("Verification code resent successfully! Please check your email.");
+      const verificationCode = response.data?.verification_code;
+      if (/^\d{6}$/.test(verificationCode)) {
+        setOtp(verificationCode.split(""));
+        setDevCode(verificationCode);
+        setMessage("Development verification code has been filled in for you.");
+      } else {
+        setMessage("Verification code resent successfully! Please check your email.");
+      }
       setTimer(60);
       setAttempts(0);
       setResendCount((prev) => prev + 1);
-      setOtp(["", "", "", "", "", ""]);
+      if (!/^\d{6}$/.test(verificationCode)) {
+        setOtp(["", "", "", "", "", ""]);
+      }
       setTimeout(() => {
         inputRefs.current[0]?.focus();
       }, 50);
@@ -235,6 +247,11 @@ export default function VerifyEmailPage() {
 
           {error && <div className="error-message">{error}</div>}
           {message && <div className="success-message">{message}</div>}
+          {devCode && (
+            <div className="success-message">
+              Local development code: <strong>{devCode}</strong>
+            </div>
+          )}
 
           <button type="submit" disabled={loading || resending || isBlocked || otp.includes("")} className="auth-button">
             {loading ? "Verifying..." : "Verify & Log In"}

@@ -44,9 +44,10 @@ export default function LoginPage() {
     } catch (err) {
       console.error("Login error:", err);
       if (err.response?.status === 403 && err.response?.data?.detail?.verification_code) {
-        const { email } = err.response.data.detail;
+        const { email, verification_code: verificationCode } = err.response.data.detail;
         const inviteQuery = inviteToken ? `&invite_token=${encodeURIComponent(inviteToken)}` : "";
-        navigate(`/verify-email?email=${encodeURIComponent(email)}${inviteQuery}`);
+        const codeQuery = /^\d{6}$/.test(verificationCode) ? `&code=${verificationCode}` : "";
+        navigate(`/verify-email?email=${encodeURIComponent(email)}${codeQuery}${inviteQuery}`);
       } else {
         setError(err.response?.data?.detail || "Login failed. Please try again.");
       }
