@@ -68,6 +68,14 @@ graph TD
 *   **Google Places Streamer:** Fetches, caches, and streams place images using Google Places photo reference keys directly to the browser.
 *   **Personalized Recommendation Feed:** Uses search histories to build personalized travel feeds. Includes community-based review cards for crowdsourced place recommendations.
 
+### 6. Comprehensive Travel Reviews & Analytics System
+*   **Multi-Category Star Ratings:** Allows granular ratings (1-5 stars) for Cleanliness, Comfort, Staff, Food, Wifi, Value, Safety, etc. tailored dynamically for Hotels vs. Tourist Places.
+*   **Verified Badges:** Automatically marks stays as `✅ Verified Stay` (if a confirmed booking exists in user history) and place visits as `✅ Verified Visitor` (if the attraction exists in user's saved or collaborative itineraries).
+*   **Interactive Review Actions:** Users can mark reviews as "Helpful" (likes) and report reviews for moderation (Spam, Offensive Content, Fake, etc.).
+*   **Visual Analytics Charts:** Displays overall score metrics, category progress bars, and star rating distribution progress charts.
+*   **Gemini AI Summaries:** Generates instant bulleted reviews summaries (Strengths, Complaints, Sentiment) using Google Gemini LLM API, with a robust programmatic keyword fallback.
+*   **Admin Moderation Dashboards:** Exposes backend admin control routes to review reported reviews and delete fake records.
+
 ---
 
 ## 🛠️ Technology Stack
