@@ -7,6 +7,32 @@ export default function useTripCollaboration(tripId) {
   const [decisions, setDecisions] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [expensesData, setExpensesData] = useState({ total_spent: 0, share_per_person: 0, expenses: [], splits: [] });
+  const [leaderLocation, setLeaderLocation] = useState(null);
+  const [expensePromptPlace, setExpensePromptPlace] = useState(null);
+  const [itinerary, setItinerary] = useState(null);
+
+  const loadExpenses = useCallback(async () => {
+    if (!tripId) return;
+    try {
+      const res = await api.get(`/api/trips/${tripId}/expenses`);
+      setExpensesData(res.data);
+    } catch (err) {
+      console.error("Failed to load expenses:", err);
+    }
+  }, [tripId]);
+
+  const loadLeaderLocation = useCallback(async () => {
+    if (!tripId) return;
+    try {
+      const res = await api.get(`/api/trips/${tripId}/leader-location`);
+      setLeaderLocation(res.data);
+    } catch (err) {
+      if (err.response?.status !== 404) {
+        console.error("Failed to load leader location:", err);
+      }
+    }
+  }, [tripId]);
 
   const loadAll = useCallback(async () => {
     if (!tripId) {
@@ -16,14 +42,17 @@ export default function useTripCollaboration(tripId) {
     setLoading(true);
     setError("");
     try {
-      const [dashboardRes, suggestionsRes, decisionsRes] = await Promise.all([
+      const [dashboardRes, suggestionsRes, decisionsRes, itineraryRes] = await Promise.all([
         api.get(`/api/trips/${tripId}/collaboration/dashboard`),
         api.get(`/api/trips/${tripId}/collaboration/suggestions`, { params: { page_size: 50 } }),
         api.get(`/api/trips/${tripId}/collaboration/decisions`),
+        api.get(`/itineraries/${tripId}`).catch(() => null),
       ]);
       setDashboard(dashboardRes.data);
       setSuggestions(suggestionsRes.data.items || []);
       setDecisions(decisionsRes.data);
+      if (itineraryRes) setItinerary(itineraryRes.data);
+      await Promise.all([loadExpenses(), loadLeaderLocation()]);
     } catch (err) {
       const status = err.response?.status;
       if (status === 404) {
@@ -36,7 +65,7 @@ export default function useTripCollaboration(tripId) {
     } finally {
       setLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, loadExpenses, loadLeaderLocation]);
 
   useEffect(() => {
     loadAll();
@@ -49,12 +78,18 @@ export default function useTripCollaboration(tripId) {
     const socket = new WebSocket(`${wsBase}/ws/trips/${tripId}?token=${encodeURIComponent(token)}`);
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      if (["suggestion_added", "vote_updated", "reaction_updated", "comment_added", "member_joined", "trip_updated", "trip_finalized"].includes(message.event)) {
+      if (message.event === "leader_location_updated") {
+        setLeaderLocation({ lat: message.lat, lon: message.lon });
+      } else if (message.event === "expense_updated") {
+        loadExpenses();
+      } else if (message.event === "ask_expense") {
+        setExpensePromptPlace(message.place_name);
+      } else if (["suggestion_added", "vote_updated", "reaction_updated", "comment_added", "member_joined", "trip_updated", "trip_finalized"].includes(message.event)) {
         loadAll();
       }
     };
     return () => socket.close();
-  }, [tripId, loadAll]);
+  }, [tripId, loadAll, loadExpenses]);
 
   const inviteMembers = async (emails, role) => {
     if (!tripId) throw new Error("Invalid trip selected");
@@ -130,6 +165,16 @@ export default function useTripCollaboration(tripId) {
     await loadAll();
   };
 
+  const updateLeaderLocation = async (lat, lon) => {
+    if (!tripId) return;
+    await api.post(`/api/trips/${tripId}/leader-location`, { lat, lon });
+  };
+
+  const addExpense = async (place_name, amount, description = "") => {
+    if (!tripId) return;
+    await api.post(`/api/trips/${tripId}/expenses`, { place_name, amount, description });
+  };
+
   const groupedSuggestions = useMemo(
     () =>
       suggestions.reduce((groups, suggestion) => {
@@ -145,8 +190,13 @@ export default function useTripCollaboration(tripId) {
     suggestions,
     groupedSuggestions,
     decisions,
+    expensesData,
+    leaderLocation,
+    expensePromptPlace,
+    setExpensePromptPlace,
+    itinerary,
     loading,
     error,
-    actions: { inviteMembers, addSuggestion, vote, rank, react, comment, setVotingLocked, finalize, reload: loadAll },
+    actions: { inviteMembers, addSuggestion, vote, rank, react, comment, setVotingLocked, finalize, updateLeaderLocation, addExpense, reload: loadAll },
   };
 }

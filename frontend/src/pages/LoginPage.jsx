@@ -75,7 +75,12 @@ export default function LoginPage() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label htmlFor="password">Password</label>
+              <Link to="/forgot-password" style={{ fontSize: "14px", color: "#0073de", textDecoration: "none", fontWeight: "500" }}>
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               id="password"
@@ -95,7 +100,6 @@ export default function LoginPage() {
         </form>
 
         <div className="auth-links">
-          <p><Link to="/forgot-password">Forgot password?</Link></p>
           <p>
             Don't have an account?{" "}
             <Link to={inviteToken ? `/signup?invite_token=${encodeURIComponent(inviteToken)}` : "/signup"}>

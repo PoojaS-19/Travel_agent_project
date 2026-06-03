@@ -77,12 +77,6 @@ export default function ForgotPasswordPage() {
           </button>
         </form>
 
-        {resetToken && (
-          <div className="reset-code-box">
-            <span>Reset code</span>
-            <strong>{resetToken}</strong>
-          </div>
-        )}
 
         <form onSubmit={handleResetPassword} className="auth-form reset-form">
           <div className="form-group">

@@ -17,6 +17,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 RESET_TOKEN_EXPIRE_MINUTES = 15
 password_reset_tokens = {}
 email_verification_codes = {}
+email_verification_attempts = {}
 
 
 class AuthService:
@@ -82,8 +83,9 @@ class AuthService:
 
     @staticmethod
     def create_password_reset_token(email: str) -> str:
-        """Create a short-lived password reset token for a user email"""
-        token = secrets.token_urlsafe(32)
+        """Create a short-lived password reset token (6-digit code) for a user email"""
+        import random
+        token = f"{random.randint(100000, 999999)}"
         password_reset_tokens[email] = {
             "token": token,
             "expires_at": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
@@ -113,14 +115,31 @@ class AuthService:
         import random
         code = f"{random.randint(100000, 999999)}"
         email_verification_codes[email] = code
+        email_verification_attempts[email] = 0
         return code
 
     @staticmethod
-    def verify_email_code(email: str, code: str) -> bool:
-        """Verify the 6-digit OTP code for the email"""
-        stored_code = email_verification_codes.get(email)
-        if stored_code and stored_code == code:
+    def verify_email_code(email: str, code: str) -> tuple[bool, str]:
+        """Verify the 6-digit OTP code for the email. Returns (success, error_message)"""
+        if email not in email_verification_codes:
+            return False, "No active verification code found or it has expired. Please request a new code."
+
+        stored_code = email_verification_codes[email]
+        if stored_code == code:
             # Consume the code
             email_verification_codes.pop(email, None)
-            return True
-        return False
+            email_verification_attempts.pop(email, None)
+            return True, ""
+
+        # Increment attempts
+        current_attempts = email_verification_attempts.get(email, 0) + 1
+        email_verification_attempts[email] = current_attempts
+
+        if current_attempts >= 3:
+            # Max attempts reached, invalidate the code
+            email_verification_codes.pop(email, None)
+            email_verification_attempts.pop(email, None)
+            return False, "Too many wrong attempts. This code is now invalid. Please request a new verification code."
+
+        tries_left = 3 - current_attempts
+        return False, f"Invalid verification code. You have {tries_left} {'try' if tries_left == 1 else 'tries'} left."

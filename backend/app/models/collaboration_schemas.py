@@ -28,7 +28,7 @@ class CollaboratorResponse(BaseModel):
 
 class InvitationCreate(BaseModel):
     emails: List[EmailStr] = Field(..., min_items=1, max_items=25)
-    role: str = Field("editor", pattern="^(editor|viewer)$")
+    role: str = Field("editor", pattern="^(editor|viewer|follower)$")
 
 
 class InvitationResponse(BaseModel):
@@ -58,7 +58,7 @@ class InvitationAcceptResponse(BaseModel):
 
 
 class MemberRoleUpdate(BaseModel):
-    role: str = Field(..., pattern="^(editor|viewer)$")
+    role: str = Field(..., pattern="^(editor|viewer|follower)$")
 
 
 class TripVotingStateUpdate(BaseModel):
@@ -190,3 +190,55 @@ class CollaborationDashboardResponse(BaseModel):
     pending_invitations: List[InvitationResponse]
     recent_suggestions: List[SuggestionResponse]
     unread_notifications: int
+
+
+class InvitationOTPAcceptRequest(BaseModel):
+    otp_code: str = Field(..., min_length=6, max_length=6)
+
+
+class LeaderLocationUpdate(BaseModel):
+    lat: float
+    lon: float
+
+
+class LeaderLocationResponse(BaseModel):
+    trip_id: int
+    lat: float
+    lon: float
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TripExpenseCreate(BaseModel):
+    place_name: str = Field(..., min_length=1, max_length=200)
+    amount: Decimal = Field(..., ge=0)
+    description: Optional[str] = Field(None, max_length=255)
+
+
+class TripExpenseResponse(BaseModel):
+    id: int
+    trip_id: int
+    user_id: int
+    username: Optional[str] = None
+    place_name: str
+    amount: Decimal
+    description: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DebtSettlement(BaseModel):
+    from_username: str
+    to_username: str
+    amount: Decimal
+
+
+class ExpenseSplitResult(BaseModel):
+    total_spent: Decimal
+    share_per_person: Decimal
+    expenses: List[TripExpenseResponse]
+    splits: List[DebtSettlement]

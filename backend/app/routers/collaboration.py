@@ -26,6 +26,12 @@ from app.models.collaboration_schemas import (
     SuggestionResponse,
     TripVotingStateUpdate,
     VoteUpsert,
+    InvitationOTPAcceptRequest,
+    LeaderLocationUpdate,
+    LeaderLocationResponse,
+    TripExpenseCreate,
+    TripExpenseResponse,
+    ExpenseSplitResult,
 )
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.routers.auth import get_current_user_id
@@ -89,6 +95,15 @@ async def revoke_invite(invitation_id: int, trip_id: int, db: Session = Depends(
 async def accept_invite(payload: InvitationAcceptRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     service = CollaborationService(db)
     collaborator = service.accept_invitation(payload.token, user_id)
+    response = service.serialize_collaborator(collaborator)
+    await trip_ws_manager.broadcast(collaborator.trip_id, "member_joined", jsonable_encoder(response))
+    return InvitationAcceptResponse(trip_id=collaborator.trip_id, collaborator=response, message="Invitation accepted")
+
+
+@router.post("/collaboration/invitations/accept-otp", response_model=InvitationAcceptResponse)
+async def accept_invite_otp(payload: InvitationOTPAcceptRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    collaborator = service.accept_invitation_by_otp(payload.otp_code, user_id)
     response = service.serialize_collaborator(collaborator)
     await trip_ws_manager.broadcast(collaborator.trip_id, "member_joined", jsonable_encoder(response))
     return InvitationAcceptResponse(trip_id=collaborator.trip_id, collaborator=response, message="Invitation accepted")
@@ -253,6 +268,72 @@ def mark_notification_read(notification_id: int, db: Session = Depends(get_db), 
     notification.read_at = datetime.utcnow()
     db.commit()
     return {"message": "Notification marked as read"}
+
+
+@router.post("/trips/{trip_id}/leader-location", response_model=LeaderLocationResponse)
+async def update_leader_location(trip_id: int, payload: LeaderLocationUpdate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    leader_loc, events_triggered = service.update_leader_location(trip_id, user_id, payload.lat, payload.lon)
+    
+    await trip_ws_manager.broadcast(trip_id, "leader_location_updated", {
+        "trip_id": trip_id,
+        "lat": payload.lat,
+        "lon": payload.lon,
+        "updated_at": leader_loc.updated_at.isoformat()
+    })
+    
+    for event in events_triggered:
+        await trip_ws_manager.broadcast(trip_id, event["event"], event)
+        
+    return LeaderLocationResponse(
+        trip_id=trip_id,
+        lat=leader_loc.lat,
+        lon=leader_loc.lon,
+        updated_at=leader_loc.updated_at
+    )
+
+
+@router.get("/trips/{trip_id}/leader-location", response_model=LeaderLocationResponse)
+def get_leader_location(trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    service.require_member(trip_id, user_id)
+    from app.models.collaboration import LeaderLocation
+    loc = db.query(LeaderLocation).filter_by(trip_id=trip_id).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail="Leader location not set yet")
+    return LeaderLocationResponse(
+        trip_id=trip_id,
+        lat=loc.lat,
+        lon=loc.lon,
+        updated_at=loc.updated_at
+    )
+
+
+@router.post("/trips/{trip_id}/expenses", response_model=TripExpenseResponse)
+async def log_expense(trip_id: int, payload: TripExpenseCreate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    expense = service.log_expense(trip_id, user_id, payload.place_name, payload.amount, payload.description)
+    user = service.repo.get_user(user_id)
+    
+    await trip_ws_manager.broadcast(trip_id, "expense_updated", {})
+    
+    return TripExpenseResponse(
+        id=expense.id,
+        trip_id=expense.trip_id,
+        user_id=expense.user_id,
+        username=user.username if user else None,
+        place_name=expense.place_name,
+        amount=expense.amount,
+        description=expense.description,
+        created_at=expense.created_at
+    )
+
+
+@router.get("/trips/{trip_id}/expenses", response_model=ExpenseSplitResult)
+def get_expense_splits(trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    splits = service.get_expense_splits(trip_id, user_id)
+    return splits
 
 
 async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str = Query(...)):

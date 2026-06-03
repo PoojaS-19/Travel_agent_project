@@ -23,6 +23,9 @@ from app.models.collaboration import (
     TripNotification,
     TripSuggestion,
     VoteValue,
+    TripExpense,
+    TripVisit,
+    LeaderLocation,
 )
 from app.models.collaboration_schemas import (
     CollaboratorResponse,
@@ -297,10 +300,12 @@ class CollaborationService:
 
             token = secrets.token_urlsafe(40)
             token_hash = self.hash_token(token)
+            otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
             invitation = self.repo.get_pending_invitation(trip_id, email)
             if invitation:
                 invitation.role = role_enum
                 invitation.token_hash = token_hash
+                invitation.otp_code = otp_code
                 invitation.expires_at = datetime.utcnow() + timedelta(days=INVITE_EXPIRE_DAYS)
                 invitation.updated_at = datetime.utcnow()
             else:
@@ -309,13 +314,16 @@ class CollaborationService:
                     email=email,
                     role=role_enum,
                     token_hash=token_hash,
+                    otp_code=otp_code,
                     invited_by_user_id=owner_id,
                     expires_at=datetime.utcnow() + timedelta(days=INVITE_EXPIRE_DAYS),
                 )
                 self.db.add(invitation)
             self.db.flush()
+            
+            print(f"[COLLAB_INVITE_OTP] to={email} otp={otp_code}")
             invite_link = f"{CLIENT_BASE_URL}/collaboration/accept?token={token}"
-            delivery = EmailService.send_trip_invitation(email, trip.destination or f"Trip #{trip.id}", inviter.username, invite_link)
+            delivery = EmailService.send_collaboration_otp(email, trip.destination or f"Trip #{trip.id}", inviter.username, otp_code)
             responses.append(self.serialize_invitation(invitation, token, delivery.sent, delivery.error))
 
         self.db.commit()
@@ -542,3 +550,227 @@ class CollaborationService:
             self.db.commit()
             self.db.refresh(notification)
         return notification
+
+    def accept_invitation_by_otp(self, otp_code: str, user_id: int) -> TripCollaborator:
+        invitation = self.db.query(TripInvitation).filter(
+            TripInvitation.otp_code == otp_code,
+            TripInvitation.status == InvitationStatus.PENDING
+        ).first()
+        
+        if not invitation:
+            raise HTTPException(status_code=404, detail="Invalid verification code or no pending invite found")
+            
+        if invitation.expires_at <= datetime.utcnow():
+            invitation.status = InvitationStatus.EXPIRED
+            self.db.commit()
+            raise HTTPException(status_code=410, detail="Invitation has expired")
+
+        target_user = self.repo.get_user_by_email(invitation.email)
+        if not target_user:
+            raise HTTPException(status_code=400, detail="The invited user must be registered before verifying the code.")
+
+        collaborator = self.repo.get_collaborator(invitation.trip_id, target_user.id)
+        if not collaborator:
+            collaborator = TripCollaborator(
+                trip_id=invitation.trip_id,
+                user_id=target_user.id,
+                role=invitation.role,
+                invited_by_user_id=invitation.invited_by_user_id,
+            )
+            self.db.add(collaborator)
+
+        invitation.status = InvitationStatus.ACCEPTED
+        invitation.accepted_by_user_id = target_user.id
+        invitation.accepted_at = datetime.utcnow()
+        self.db.flush()
+        
+        self.notify_trip_owner(invitation.trip_id, target_user.id, NotificationType.INVITE_ACCEPTED, "Invite accepted", f"{target_user.username} joined your trip.")
+        self.db.commit()
+        self.db.refresh(collaborator)
+        return collaborator
+
+    def update_leader_location(self, trip_id: int, user_id: int, lat: float, lon: float) -> Tuple[LeaderLocation, List[dict]]:
+        self.require_owner(trip_id, user_id)
+        
+        leader_loc = self.db.query(LeaderLocation).filter_by(trip_id=trip_id).first()
+        if not leader_loc:
+            leader_loc = LeaderLocation(trip_id=trip_id, lat=lat, lon=lon)
+            self.db.add(leader_loc)
+        else:
+            leader_loc.lat = lat
+            leader_loc.lon = lon
+            leader_loc.updated_at = datetime.utcnow()
+        self.db.flush()
+        
+        trip = self.repo.get_trip(trip_id)
+        if not trip or not trip.daily_plans:
+            self.db.commit()
+            return leader_loc, []
+            
+        events_triggered = []
+        import math
+        def get_dist(lat1, lon1, lat2, lon2):
+            return round(math.sqrt((lat1 - lat2) ** 2 + (lon1 - lon2) ** 2) * 111, 3)
+            
+        activities = []
+        for day in (trip.daily_plans or []):
+            for activity in (day.get("activities", []) or []):
+                place_name = activity.get("place_name")
+                a_lat = activity.get("lat")
+                a_lon = activity.get("lon")
+                if place_name and a_lat is not None and a_lon is not None:
+                    activities.append({
+                        "place_name": place_name,
+                        "lat": float(a_lat),
+                        "lon": float(a_lon)
+                    })
+                    
+        for act in activities:
+            dist = get_dist(lat, lon, act["lat"], act["lon"])
+            visit = self.db.query(TripVisit).filter_by(trip_id=trip_id, place_name=act["place_name"]).first()
+            
+            if dist < 0.2:
+                if not visit:
+                    visit = TripVisit(trip_id=trip_id, place_name=act["place_name"], status="arrived", arrived_at=datetime.utcnow())
+                    self.db.add(visit)
+                    self.db.flush()
+                    events_triggered.append({
+                        "event": "leader_arrived",
+                        "place_name": act["place_name"],
+                        "trip_id": trip_id
+                    })
+                elif visit.status == "left":
+                    visit.status = "arrived"
+                    visit.arrived_at = datetime.utcnow()
+                    visit.left_at = None
+                    visit.prompt_sent = False
+                    self.db.flush()
+                    events_triggered.append({
+                        "event": "leader_arrived",
+                        "place_name": act["place_name"],
+                        "trip_id": trip_id
+                    })
+            elif dist > 0.5:
+                if visit and visit.status == "arrived":
+                    visit.status = "left"
+                    visit.left_at = datetime.utcnow()
+                    
+                    if not visit.prompt_sent:
+                        visit.prompt_sent = True
+                        self.db.flush()
+                        events_triggered.append({
+                            "event": "ask_expense",
+                            "place_name": act["place_name"],
+                            "trip_id": trip_id
+                        })
+                        
+                        self.notify_members(
+                            trip_id,
+                            user_id,
+                            NotificationType.NEW_SUGGESTION,
+                            f"How much did you spend at {act['place_name']}?",
+                            f"Leader left {act['place_name']}. Log your expenses."
+                        )
+                        
+        self.db.commit()
+        return leader_loc, events_triggered
+
+    def log_expense(self, trip_id: int, user_id: int, place_name: str, amount: Decimal, description: Optional[str]) -> TripExpense:
+        self.require_member(trip_id, user_id)
+        
+        expense = TripExpense(
+            trip_id=trip_id,
+            user_id=user_id,
+            place_name=place_name.strip(),
+            amount=amount,
+            description=description.strip() if description else None
+        )
+        self.db.add(expense)
+        self.db.commit()
+        self.db.refresh(expense)
+        return expense
+
+    def get_expense_splits(self, trip_id: int, user_id: int) -> dict:
+        self.require_member(trip_id, user_id)
+        
+        expenses = self.db.query(TripExpense).filter_by(trip_id=trip_id).order_by(TripExpense.created_at.desc()).all()
+        
+        collaborators = self.repo.list_collaborators(trip_id)
+        members = {c.user_id: c.user.username for c in collaborators if c.user}
+        
+        trip = self.repo.get_trip(trip_id)
+        if trip and trip.user_id and trip.user_id not in members:
+            owner = self.repo.get_user(trip.user_id)
+            if owner:
+                members[trip.user_id] = owner.username
+                
+        user_spent = {uid: Decimal("0.00") for uid in members.keys()}
+        total_spent = Decimal("0.00")
+        
+        serialized_expenses = []
+        for e in expenses:
+            uid = e.user_id
+            uname = members.get(uid, f"User #{uid}")
+            user_spent[uid] = user_spent.get(uid, Decimal("0.00")) + e.amount
+            total_spent += e.amount
+            serialized_expenses.append({
+                "id": e.id,
+                "trip_id": e.trip_id,
+                "user_id": e.user_id,
+                "username": uname,
+                "place_name": e.place_name,
+                "amount": float(e.amount),
+                "description": e.description or "",
+                "created_at": e.created_at
+            })
+            
+        num_members = len(members)
+        share_per_person = Decimal("0.00")
+        splits = []
+        
+        if num_members > 0:
+            share_per_person = total_spent / Decimal(num_members)
+            
+            balances = {uid: user_spent[uid] - share_per_person for uid in members.keys()}
+            
+            debtors = []
+            creditors = []
+            
+            for uid, bal in balances.items():
+                if bal < -Decimal("0.01"):
+                    debtors.append([uid, -bal])
+                elif bal > Decimal("0.01"):
+                    creditors.append([uid, bal])
+            
+            debtors.sort(key=lambda x: x[1], reverse=True)
+            creditors.sort(key=lambda x: x[1], reverse=True)
+            
+            d_idx = 0
+            c_idx = 0
+            
+            while d_idx < len(debtors) and c_idx < len(creditors):
+                d_id, d_amt = debtors[d_idx]
+                c_id, c_amt = creditors[c_idx]
+                
+                settle_amt = min(d_amt, c_amt)
+                
+                splits.append({
+                    "from_username": members.get(d_id, f"User #{d_id}"),
+                    "to_username": members.get(c_id, f"User #{c_id}"),
+                    "amount": round(float(settle_amt), 2)
+                })
+                
+                debtors[d_idx][1] -= settle_amt
+                creditors[c_idx][1] -= settle_amt
+                
+                if debtors[d_idx][1] < Decimal("0.01"):
+                    d_idx += 1
+                if creditors[c_idx][1] < Decimal("0.01"):
+                    c_idx += 1
+                    
+        return {
+            "total_spent": float(total_spent),
+            "share_per_person": float(share_per_person),
+            "expenses": serialized_expenses,
+            "splits": splits
+        }

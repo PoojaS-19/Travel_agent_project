@@ -13,6 +13,11 @@ from app.models.models import (
     BookingStatus,
     BookingType,
     SearchType,
+    PlaceReview,
+    HotelReview,
+    ReviewMedia,
+    ReviewLike,
+    ReviewReport,
 )
 from app.models.collaboration import (
     CollaboratorRole,
@@ -27,6 +32,9 @@ from app.models.collaboration import (
     TripNotification,
     TripSuggestion,
     VoteValue,
+    TripExpense,
+    TripVisit,
+    LeaderLocation,
 )
 
 __all__ = [
@@ -44,6 +52,11 @@ __all__ = [
     "BookingStatus",
     "BookingType",
     "SearchType",
+    "PlaceReview",
+    "HotelReview",
+    "ReviewMedia",
+    "ReviewLike",
+    "ReviewReport",
     "CollaboratorRole",
     "InvitationStatus",
     "NotificationType",
@@ -56,4 +69,8 @@ __all__ = [
     "TripNotification",
     "TripSuggestion",
     "VoteValue",
+    "TripExpense",
+    "TripVisit",
+    "LeaderLocation",
 ]
+

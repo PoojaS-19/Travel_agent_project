@@ -16,6 +16,7 @@ api.interceptors.request.use(
       "/auth/login",
       "/auth/signup",
       "/auth/verify-email",
+      "/auth/resend-otp",
       "/auth/forgot-password",
       "/auth/reset-password"
     ];

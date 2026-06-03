@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import API from "../api";
 import "../App.css";
+import ReviewsModal from "../components/ReviewsModal";
 
 export default function HotelsPage() {
   const location = useLocation();
   const [city, setCity] = useState("");
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedHotel, setSelectedHotel] = useState(null);
 
   const getHotels = async (cityVal = city) => {
     const token = localStorage.getItem("token");
@@ -82,10 +84,29 @@ export default function HotelsPage() {
           >
             <h3>{h.name}</h3>
             <p>{h.formatted_address || h.vicinity}</p>
-            {h.rating && <span>⭐ {h.rating}</span>}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
+              {h.rating && <span style={{ fontWeight: 600 }}>⭐ {h.rating}</span>}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedHotel(h.name);
+                }}
+                className="saved-trip-primary-btn"
+                style={{ padding: "6px 12px", fontSize: "12px", zIndex: 10 }}
+              >
+                💬 View Reviews
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      <ReviewsModal
+        open={selectedHotel !== null}
+        onClose={() => setSelectedHotel(null)}
+        itemName={selectedHotel}
+        reviewType="hotel"
+      />
 
     </div>
   );

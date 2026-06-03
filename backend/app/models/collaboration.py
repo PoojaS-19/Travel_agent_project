@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     DECIMAL,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -23,6 +24,7 @@ class CollaboratorRole(str, enum.Enum):
     OWNER = "owner"
     EDITOR = "editor"
     VIEWER = "viewer"
+    FOLLOWER = "follower"
 
 
 class InvitationStatus(str, enum.Enum):
@@ -83,6 +85,7 @@ class TripInvitation(Base):
     email = Column(String(255), nullable=False)
     role = Column(Enum(CollaboratorRole), nullable=False, default=CollaboratorRole.EDITOR)
     token_hash = Column(String(128), unique=True, nullable=False)
+    otp_code = Column(String(6), nullable=True)
     status = Column(Enum(InvitationStatus), nullable=False, default=InvitationStatus.PENDING)
     invited_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     accepted_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -216,3 +219,43 @@ class TripNotification(Base):
         Index("ix_trip_notifications_recipient_read", "recipient_user_id", "read_at"),
         Index("ix_trip_notifications_trip_created", "trip_id", "created_at"),
     )
+
+
+class TripExpense(Base):
+    __tablename__ = "trip_expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    place_name = Column(String(200), nullable=False)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    trip = relationship("Itinerary")
+    user = relationship("User")
+
+
+class TripVisit(Base):
+    __tablename__ = "trip_visits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    place_name = Column(String(200), nullable=False)
+    status = Column(String(20), nullable=False)  # "arrived" or "left"
+    arrived_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    left_at = Column(DateTime, nullable=True)
+    prompt_sent = Column(Boolean, default=False, nullable=False)
+
+    trip = relationship("Itinerary")
+
+
+class LeaderLocation(Base):
+    __tablename__ = "leader_locations"
+
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), primary_key=True)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    trip = relationship("Itinerary")

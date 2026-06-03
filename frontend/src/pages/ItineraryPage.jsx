@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+
 import API, { API_BASE_URL } from "../api";
 import "../App.css";
 import MapComponent from "../components/MapComponent";
 import { CITIES } from "../data/cities";
 import html2pdf from "html2pdf.js";
+import ReviewsModal from "../components/ReviewsModal";
 
 // --- AUTOCOMPLETE COMPONENT ---
 function CityAutocomplete({ placeholder, value, onChange }) {
@@ -258,100 +260,7 @@ function ImageCarousel({ placeName, destination }) {
   );
 }
 
-function ReviewForm({ place, destination, onClose }) {
-  const [rating, setRating] = useState(5);
-  const [review, setReview] = useState("");
-  const [tripType, setTripType] = useState("");
-  const [mood, setMood] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submitReview = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-    setLoading(true);
-    try {
-      await API.post("/api/reviews", {
-        place_name: place.place_name,
-        destination: destination,
-        rating: rating,
-        review: review || null,
-        category: place.category,
-        trip_type: tripType || null,
-        mood: mood || null,
-        lat: place.lat,
-        lon: place.lon
-      });
-      alert("Thank you for your review!");
-      onClose();
-    } catch (error) {
-      alert("Failed to submit review. Please try again.");
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="review-form">
-      <div className="form-group">
-        <label>Rating:</label>
-        <div className="rating-input">
-          {[1, 2, 3, 4, 5].map(star => (
-            <span
-              key={star}
-              className={`star ${rating >= star ? 'active' : ''}`}
-              onClick={() => setRating(star)}
-            >
-              ⭐
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>Review (optional):</label>
-        <textarea
-          value={review}
-          onChange={(e) => setReview(e.target.value)}
-          placeholder="Share your experience..."
-          rows={3}
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Trip Type:</label>
-        <select value={tripType} onChange={(e) => setTripType(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="solo">Solo</option>
-          <option value="friends">Friends</option>
-          <option value="family">Family</option>
-          <option value="couple">Couple</option>
-          <option value="business">Business</option>
-        </select>
-      </div>
-
-      <div className="form-group">
-        <label>Mood:</label>
-        <select value={mood} onChange={(e) => setMood(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="chill">Chill</option>
-          <option value="adventure">Adventure</option>
-          <option value="cultural">Cultural</option>
-          <option value="romantic">Romantic</option>
-          <option value="exciting">Exciting</option>
-        </select>
-      </div>
-
-      <div className="modal-actions">
-        <button onClick={onClose} className="cancel-btn">Cancel</button>
-        <button onClick={submitReview} disabled={loading} className="submit-btn">
-          {loading ? "Submitting..." : "Submit Review"}
-        </button>
-      </div>
-    </div>
-  );
-}
+// Legacy ReviewForm removed in favor of the new upgraded ReviewsModal
 
 function buildLocalFallbackItinerary(form) {
   const destination = form.destination || "your destination";
@@ -441,6 +350,13 @@ function buildLocalFallbackItinerary(form) {
 export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
   const location = useLocation();
 
+  const navigate = useNavigate();
+  const [savedTripId, setSavedTripId] = useState(null);
+  const [isFinalized, setIsFinalized] = useState(false);
+  const [followers, setFollowers] = useState([
+    { email: "", invited: false, verified: false, otp: "", message: "", error: "", loadingInvite: false, loadingVerify: false }
+  ]);
+
   const [form, setForm] = useState({
     start_city: "",
     destination: "",
@@ -527,6 +443,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       } else {
         setResult(data.itinerary || data.itinerary_text || "No itinerary returned from backend.");
       }
+
+      if (data.id) {
+        setSavedTripId(data.id);
+      } else {
+        setSavedTripId(null);
+      }
+      setIsFinalized(false);
 
       // Fetch personalized recommendations
       try {
@@ -739,6 +662,121 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     setResult(itinerary.itinerary_text);
     setDailyPlans(itinerary.daily_plans);
     setShowSaved(false);
+    if (itinerary.id) {
+      setSavedTripId(itinerary.id);
+    } else {
+      setSavedTripId(null);
+    }
+    setIsFinalized(false);
+  };
+
+  const handleEditItinerary = () => {
+    if (savedTripId) {
+      navigate(`/saved-trips?id=${savedTripId}`);
+    } else {
+      alert("No saved trip ID found. Please generate or load an itinerary first.");
+    }
+  };
+
+  const handleFinalizeItinerary = () => {
+    setIsFinalized(true);
+    setFollowers([
+      { email: "", invited: false, verified: false, otp: "", message: "", error: "", loadingInvite: false, loadingVerify: false }
+    ]);
+  };
+
+  const addFollowerField = () => {
+    setFollowers([...followers, { email: "", invited: false, verified: false, otp: "", message: "", error: "", loadingInvite: false, loadingVerify: false }]);
+  };
+
+  const handleFollowerEmailChange = (index, value) => {
+    const updated = [...followers];
+    updated[index].email = value;
+    setFollowers(updated);
+  };
+
+  const handleFollowerOtpChange = (index, value) => {
+    const updated = [...followers];
+    updated[index].otp = value;
+    setFollowers(updated);
+  };
+
+  const handleSendInvite = async (index) => {
+    const follower = followers[index];
+    if (!follower.email) {
+      const updated = [...followers];
+      updated[index].error = "Please enter a valid email address.";
+      setFollowers(updated);
+      return;
+    }
+    if (!savedTripId) {
+      const updated = [...followers];
+      updated[index].error = "Please generate or load an itinerary first.";
+      setFollowers(updated);
+      return;
+    }
+
+    const updated = [...followers];
+    updated[index].loadingInvite = true;
+    updated[index].error = "";
+    updated[index].message = "";
+    setFollowers(updated);
+
+    try {
+      await API.post(`/api/trips/${savedTripId}/collaboration/invitations`, {
+        emails: [follower.email],
+        role: "follower"
+      });
+      const updatedSuccess = [...followers];
+      updatedSuccess[index].invited = true;
+      updatedSuccess[index].message = "Verification code sent to email.";
+      updatedSuccess[index].loadingInvite = false;
+      setFollowers(updatedSuccess);
+    } catch (err) {
+      console.error("Invite follower error:", err);
+      const updatedErr = [...followers];
+      updatedErr[index].error = err.response?.data?.detail || "Could not send invite.";
+      updatedErr[index].loadingInvite = false;
+      setFollowers(updatedErr);
+    }
+  };
+
+  const handleVerifyOtp = async (index) => {
+    const follower = followers[index];
+    if (follower.otp.length !== 6) {
+      const updated = [...followers];
+      updated[index].error = "Please enter a 6-digit verification code.";
+      setFollowers(updated);
+      return;
+    }
+
+    const updated = [...followers];
+    updated[index].loadingVerify = true;
+    updated[index].error = "";
+    updated[index].message = "";
+    setFollowers(updated);
+
+    try {
+      await API.post("/api/collaboration/invitations/accept-otp", {
+        otp_code: follower.otp
+      });
+      const updatedSuccess = [...followers];
+      updatedSuccess[index].verified = true;
+      updatedSuccess[index].message = "Follower linked successfully!";
+      updatedSuccess[index].loadingVerify = false;
+      setFollowers(updatedSuccess);
+    } catch (err) {
+      console.error("Verify OTP error:", err);
+      const updatedErr = [...followers];
+      updatedErr[index].error = err.response?.data?.detail || "Invalid code or user not registered.";
+      updatedErr[index].loadingVerify = false;
+      setFollowers(updatedErr);
+    }
+  };
+
+  const handleDoneFinalizing = () => {
+    setIsFinalized(false);
+    alert("Followers linking process finished.");
   };
 
   const addToItinerary = (suggestion) => {
@@ -848,9 +886,138 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
 
       {/* ACTIONS */}
       {result && (
-        <div className="result-actions">
-          <button onClick={copyToClipboard}>Copy</button>
-          <button onClick={downloadPDF}>Download PDF</button>
+        <div className="result-actions" style={{ display: "flex", gap: "10px", justifyContent: "center", margin: "20px 0", flexWrap: "wrap" }}>
+          <button onClick={copyToClipboard} className="saved-trip-secondary-btn">Copy</button>
+          <button onClick={downloadPDF} className="saved-trip-secondary-btn">Download PDF</button>
+          {savedTripId && (
+            <>
+              <button onClick={handleEditItinerary} className="saved-trip-primary-btn">Edit Itinerary</button>
+              <button onClick={handleFinalizeItinerary} className="saved-trip-primary-btn" style={{ background: "#10b981" }}>Finalize It</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {isFinalized && savedTripId && (
+        <div className="link-follower-card" style={{
+          maxWidth: "650px",
+          margin: "20px auto",
+          background: "rgba(255, 255, 255, 0.95)",
+          padding: "25px",
+          borderRadius: "16px",
+          boxShadow: "0 6px 30px rgba(0, 0, 0, 0.15)",
+          border: "1px solid #e2e8f0"
+        }}>
+          <h3 style={{ marginTop: 0, color: "#1e293b", fontSize: "20px", fontWeight: "600", marginBottom: "10px", textAlign: "center" }}>Link Follower (Optional)</h3>
+          <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px", textAlign: "center" }}>
+            Add travel buddies to your trip. They will be linked as followers. Send the invite code to their email, enter the code below to verify them, and click **Done** when finished.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginBottom: "20px" }}>
+            {followers.map((follower, index) => (
+              <div key={index} style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "12px",
+                padding: "16px",
+                position: "relative"
+              }}>
+                <h4 style={{ margin: "0 0 10px 0", fontSize: "15px", color: "#334155" }}>Buddy #{index + 1}</h4>
+                
+                {/* Email Input row */}
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <input
+                    type="email"
+                    placeholder="Follower's Email Address"
+                    value={follower.email}
+                    onChange={(e) => handleFollowerEmailChange(index, e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "14px"
+                    }}
+                    disabled={follower.invited}
+                    required
+                  />
+                  {!follower.invited && (
+                    <button
+                      type="button"
+                      disabled={follower.loadingInvite}
+                      onClick={() => handleSendInvite(index)}
+                      className="saved-trip-primary-btn"
+                      style={{ padding: "10px 18px", fontSize: "13px" }}
+                    >
+                      {follower.loadingInvite ? "Sending..." : "Send Invite"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Verification Row (only visible if invited and not verified) */}
+                {follower.invited && !follower.verified && (
+                  <div style={{ marginTop: "12px", display: "flex", gap: "10px", alignItems: "center" }}>
+                    <input
+                      type="text"
+                      placeholder="6-digit OTP Code"
+                      maxLength={6}
+                      value={follower.otp}
+                      onChange={(e) => handleFollowerOtpChange(index, e.target.value.replace(/\D/g, ""))}
+                      style={{
+                        width: "140px",
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "14px"
+                      }}
+                      disabled={follower.loadingVerify}
+                    />
+                    <button
+                      type="button"
+                      disabled={follower.loadingVerify}
+                      onClick={() => handleVerifyOtp(index)}
+                      className="saved-trip-primary-btn"
+                      style={{ padding: "10px 18px", fontSize: "13px", background: "#10b981" }}
+                    >
+                      {follower.loadingVerify ? "Verifying..." : "Verify Code"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Status / Success Messages */}
+                {follower.message && (
+                  <div style={{ marginTop: "10px", color: "#16a34a", fontSize: "13px", fontWeight: "500" }}>
+                    ✓ {follower.message}
+                  </div>
+                )}
+                {follower.error && (
+                  <div style={{ marginTop: "10px", color: "#dc2626", fontSize: "13px", fontWeight: "500" }}>
+                    ⚠ {follower.error}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={addFollowerField}
+              className="saved-trip-secondary-btn"
+              style={{ padding: "10px 18px" }}
+            >
+              + Add More Buddy
+            </button>
+            
+            <button
+              type="button"
+              onClick={handleDoneFinalizing}
+              className="saved-trip-primary-btn"
+              style={{ padding: "10px 24px", background: "#4f46e5" }}
+            >
+              Done
+            </button>
+          </div>
         </div>
       )}
 
@@ -1024,18 +1191,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       )}
 
       {/* REVIEW MODAL */}
-      {reviewModal.isOpen && reviewModal.place && (
-        <div className="modal-overlay" onClick={() => setReviewModal({ isOpen: false, place: null })}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Rate {reviewModal.place.place_name}</h3>
-            <ReviewForm
-              place={reviewModal.place}
-              destination={form.destination}
-              onClose={() => setReviewModal({ isOpen: false, place: null })}
-            />
-          </div>
-        </div>
-      )}
+      <ReviewsModal
+        open={reviewModal.isOpen}
+        onClose={() => setReviewModal({ isOpen: false, place: null })}
+        itemName={reviewModal.place ? reviewModal.place.place_name : null}
+        reviewType="place"
+        destination={form.destination}
+      />
 
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api";
 import "../App.css";
 
@@ -22,6 +22,8 @@ const emptyActivityForm = {
 
 export default function SavedTripsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tripIdFromUrl = searchParams.get("id");
   const [trips, setTrips] = useState([]);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
@@ -32,6 +34,9 @@ export default function SavedTripsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
   const [activityForm, setActivityForm] = useState(emptyActivityForm);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
 
   const tripStats = useMemo(() => {
     const days = selectedTrip?.daily_plans?.length || 0;
@@ -46,6 +51,28 @@ export default function SavedTripsPage() {
     fetchTrips();
   }, []);
 
+  const handleJoinTripWithOTP = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError("Please enter a 6-digit code.");
+      return;
+    }
+    setOtpError("");
+    setOtpLoading(true);
+    try {
+      const response = await API.post("/api/collaboration/invitations/accept-otp", { otp_code: otpCode });
+      const tripId = response.data.trip_id;
+      setMessage("Joined trip successfully!");
+      setOtpCode("");
+      await fetchTrips();
+      navigate(`/collaborate/${tripId}`);
+    } catch (err) {
+      console.error(err);
+      setOtpError(err.response?.data?.detail || "Could not verify code.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const fetchTrips = async () => {
     setLoading(true);
     setError("");
@@ -56,6 +83,10 @@ export default function SavedTripsPage() {
       setTrips(loadedTrips);
       setSelectedTrip((current) => {
         if (!loadedTrips.length) return null;
+        if (tripIdFromUrl) {
+          const found = loadedTrips.find((trip) => trip.id === Number(tripIdFromUrl));
+          if (found) return found;
+        }
         if (!current) return loadedTrips[0];
         return loadedTrips.find((trip) => trip.id === current.id) || loadedTrips[0];
       });
@@ -204,6 +235,30 @@ export default function SavedTripsPage() {
             <button onClick={fetchTrips} className="saved-trip-secondary-btn">
               Refresh
             </button>
+          </div>
+
+          <div className="join-trip-otp-card" style={{ marginBottom: "20px", padding: "12px", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(255,255,255,0.05)" }}>
+            <h4 style={{ margin: "0 0 8px 0", fontSize: "14px" }}>Join Trip with Invite Code</h4>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="6-digit OTP"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                style={{ flex: 1, padding: "6px 10px", fontSize: "13px", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white" }}
+              />
+              <button
+                type="button"
+                onClick={handleJoinTripWithOTP}
+                disabled={otpLoading}
+                className="saved-trip-primary-btn"
+                style={{ padding: "6px 12px", fontSize: "13px" }}
+              >
+                {otpLoading ? "Joining..." : "Join"}
+              </button>
+            </div>
+            {otpError && <p style={{ color: "#ef4444", fontSize: "11px", margin: "4px 0 0 0" }}>{otpError}</p>}
           </div>
 
           {loading ? (

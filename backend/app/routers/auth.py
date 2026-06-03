@@ -16,6 +16,7 @@ from app.models.schemas import (
     UserResponse,
     SignupResponse,
     VerifyEmailRequest,
+    ResendOTPRequest,
 )
 from app.services.auth_service import AuthService
 from app.services.collaboration_service import CollaborationService
@@ -103,57 +104,84 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     
     Creates a new user and returns email verification details
     """
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    import traceback
+    print(f"[SIGNUP-LOG] Signup flow started for email: {user_data.email}, username: {user_data.username}")
+    try:
+        # Check if user already exists by email
+        existing_user = db.query(User).filter(User.email == user_data.email).first()
+        if existing_user:
+            if existing_user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered"
+                )
+            else:
+                db.delete(existing_user)
+                db.commit()
+        
+        # Check if username already exists
+        existing_username = db.query(User).filter(User.username == user_data.username).first()
+        if existing_username:
+            if existing_username.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken"
+                )
+            else:
+                db.delete(existing_username)
+                db.commit()
+        
+        # Hash password and create user
+        hashed_password = AuthService.hash_password(user_data.password)
+        
+        new_user = User(
+            username=user_data.username,
+            email=user_data.email,
+            password_hash=hashed_password,
+            is_verified=False
         )
-    
-    existing_username = db.query(User).filter(User.username == user_data.username).first()
-    if existing_username:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
-        )
-    
-    # Hash password and create user
-    hashed_password = AuthService.hash_password(user_data.password)
-    
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        password_hash=hashed_password,
-        is_verified=False
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+        
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    if user_data.invite_token:
-        try:
-            CollaborationService(db).accept_invitation(user_data.invite_token, new_user.id)
-        except HTTPException:
-            raise
-        except Exception as invite_error:
+        if user_data.invite_token:
+            try:
+                CollaborationService(db).accept_invitation(user_data.invite_token, new_user.id)
+            except HTTPException:
+                raise
+            except Exception as invite_error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Account created, but invite acceptance failed: {invite_error}"
+                )
+        
+        # Generate verification code
+        print(f"[SIGNUP-LOG] Generating OTP for email: {new_user.email}")
+        verification_code = AuthService.generate_verification_code(new_user.email)
+        
+        # Send actual email verification code via SMTP
+        print(f"[SIGNUP-LOG] Calling EmailService.send_verification_otp() for email: {new_user.email} with code: {verification_code}")
+        delivery = EmailService.send_verification_otp(new_user.email, verification_code)
+        print(f"[SIGNUP-LOG] EmailService.send_verification_otp() returned sent={delivery.sent}, error={delivery.error}")
+        
+        if not delivery.sent:
+            db.delete(new_user)
+            db.commit()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Account created, but invite acceptance failed: {invite_error}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
             )
-    
-    # Generate verification code
-    verification_code = AuthService.generate_verification_code(new_user.email)
-    
-    # Send actual email verification code via SMTP
-    EmailService.send_verification_otp(new_user.email, verification_code)
-    
-    return SignupResponse(
-        message="Verification code sent to your email. Please check your inbox.",
-        verification_code="sent_to_email",
-        email=new_user.email
-    )
+        
+        return SignupResponse(
+            message="Verification code sent to your email. Please check your inbox.",
+            verification_code="sent_to_email",
+            email=new_user.email
+        )
+    except Exception as e:
+        print("[SIGNUP-LOG] Exception occurred in signup flow:")
+        traceback.print_exc()
+        raise
 
 
 @router.post("/verify-email", response_model=TokenResponse)
@@ -190,10 +218,11 @@ def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
         )
     
     # Verify code
-    if not AuthService.verify_email_code(request.email, request.code):
+    success, err_msg = AuthService.verify_email_code(request.email, request.code)
+    if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification code"
+            detail=err_msg
         )
     
     # Set verified status
@@ -221,6 +250,38 @@ def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/resend-otp")
+def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
+    """
+    Resend verification OTP to the user's email
+    """
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email"
+        )
+    
+    if user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is already verified"
+        )
+        
+    # Generate verification code
+    verification_code = AuthService.generate_verification_code(user.email)
+    
+    # Send actual email verification code via SMTP
+    delivery = EmailService.send_verification_otp(user.email, verification_code)
+    if not delivery.sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resend verification email: {delivery.error}"
+        )
+    
+    return {"message": "Verification code resent successfully. Please check your inbox."}
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """
@@ -243,7 +304,12 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         # Generate new verification code
         verification_code = AuthService.generate_verification_code(user.email)
         # Send actual email verification code via SMTP
-        EmailService.send_verification_otp(user.email, verification_code)
+        delivery = EmailService.send_verification_otp(user.email, verification_code)
+        if not delivery.sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Email is not verified, and we failed to send a new verification code: {delivery.error}"
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -290,10 +356,16 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
         )
 
     reset_token = AuthService.create_password_reset_token(user.email)
-
+    delivery = EmailService.send_password_reset_otp(user.email, reset_token)
+    if not delivery.sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send password reset email: {delivery.error}"
+        )
+ 
     return ForgotPasswordResponse(
-        message="Password reset code generated. Use it within 15 minutes.",
-        reset_token=reset_token
+        message="Password reset code sent to your email. Use it within 15 minutes.",
+        reset_token=None
     )
 
 
@@ -350,3 +422,20 @@ def get_current_user(user_id: int = Depends(get_current_user_id), db: Session = 
         email=user.email,
         created_at=user.created_at.isoformat()
     )
+
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
+@router.get("/all-users")
+def get_all_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "username": u.username
+        }
+        for u in users
+    ]

@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -27,6 +28,7 @@ class User(Base):
     suggestion_reactions = relationship("SuggestionReaction", back_populates="user", cascade="all, delete-orphan")
     suggestion_comments = relationship("SuggestionComment", back_populates="user", cascade="all, delete-orphan")
     trip_notifications = relationship("TripNotification", foreign_keys="TripNotification.recipient_user_id", back_populates="recipient", cascade="all, delete-orphan")
+    hotel_reviews = relationship("HotelReview", back_populates="user", cascade="all, delete-orphan")
 
 
 class Flight(Base):
@@ -225,10 +227,95 @@ class PlaceReview(Base):
     lon = Column(DECIMAL(11, 8), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Extended Review Fields
+    review_title = Column(String(200), nullable=True)
+    additional_notes = Column(Text, nullable=True)
+    would_visit_again = Column(Boolean, nullable=True)
+    traveler_type = Column(String(50), nullable=True)
+    verified_status = Column(Boolean, default=False, nullable=False)
+
+    # Detailed Category Ratings (1-5 stars)
+    rating_safety = Column(Integer, nullable=True)
+    rating_cleanliness = Column(Integer, nullable=True)
+    rating_crowd = Column(Integer, nullable=True)
+    rating_accessibility = Column(Integer, nullable=True)
+    rating_scenic = Column(Integer, nullable=True)
+    rating_family = Column(Integer, nullable=True)
+    rating_food = Column(Integer, nullable=True)
+    rating_transport = Column(Integer, nullable=True)
+    rating_value = Column(Integer, nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="place_reviews")
 
-    # Index hint: destination, place_name
+
+class HotelReview(Base):
+    __tablename__ = "hotel_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    hotel_name = Column(String(200), nullable=False)
+    hotel_id = Column(Integer, ForeignKey("hotels.id", ondelete="SET NULL"), nullable=True)
+    rating = Column(DECIMAL(2, 1), nullable=False)  # Overall rating
+    review_title = Column(String(200), nullable=True)
+    review_text = Column(Text, nullable=True)
+    additional_notes = Column(Text, nullable=True)
+    would_recommend = Column(Boolean, nullable=True)
+    stay_date = Column(String(50), nullable=True)
+    traveler_type = Column(String(50), nullable=True)
+    trip_purpose = Column(String(50), nullable=True)
+    verified_status = Column(Boolean, default=False, nullable=False)
+
+    # Detailed Category Ratings (1-5 stars)
+    rating_cleanliness = Column(Integer, nullable=True)
+    rating_staff = Column(Integer, nullable=True)
+    rating_comfort = Column(Integer, nullable=True)
+    rating_food = Column(Integer, nullable=True)
+    rating_value = Column(Integer, nullable=True)
+    rating_location = Column(Integer, nullable=True)
+    rating_amenities = Column(Integer, nullable=True)
+    rating_safety = Column(Integer, nullable=True)
+    rating_checkin = Column(Integer, nullable=True)
+    rating_wifi = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="hotel_reviews")
+
+
+class ReviewMedia(Base):
+    __tablename__ = "review_media"
+
+    id = Column(Integer, primary_key=True, index=True)
+    review_type = Column(String(50), nullable=False)  # "hotel" or "place"
+    review_id = Column(Integer, nullable=False)
+    media_type = Column(String(20), nullable=False)  # "image" or "video"
+    file_url = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReviewLike(Base):
+    __tablename__ = "review_likes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    review_type = Column(String(50), nullable=False)  # "hotel" or "place"
+    review_id = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReviewReport(Base):
+    __tablename__ = "review_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    review_type = Column(String(50), nullable=False)  # "hotel" or "place"
+    review_id = Column(Integer, nullable=False)
+    reason = Column(String(100), nullable=False)  # "spam", "fake", "offensive", "misleading", "other"
+    details = Column(Text, nullable=True)
+    status = Column(String(50), default="pending", nullable=False)  # "pending", "resolved", "dismissed"
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # Add to User model
