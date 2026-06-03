@@ -2,22 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./MainHome.css";
 
-const MONTHS = [
-  "Any Month",
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 const CATEGORIES = [
   { name: "All", icon: "ALL" },
   { name: "Religious", icon: "REL" },
@@ -32,18 +16,6 @@ const CATEGORIES = [
   { name: "Outdoors", icon: "ADV" },
   { name: "Nightlife", icon: "NGT" },
   { name: "Luxury", icon: "LUX" },
-];
-
-const FROM_CITIES = [
-  "Mumbai",
-  "Delhi",
-  "Bengaluru",
-  "Pune",
-  "Chennai",
-  "Hyderabad",
-  "Kolkata",
-  "Ahmedabad",
-  "Jaipur",
 ];
 
 const PLACE_BATCH_SIZE = 8;
@@ -527,32 +499,6 @@ const PLACES = [
   },
 ];
 
-function RangeSlider({ min, max, value, onChange, formatLabel, step = 1 }) {
-  const percentage = ((value - min) / (max - min)) * 100;
-
-  return (
-    <div className="range-slider-container">
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="range-slider-input"
-        style={{
-          background: `linear-gradient(to right, #ec5b24 0%, #ec5b24 ${percentage}%, #e2e8f0 ${percentage}%, #e2e8f0 100%)`,
-        }}
-      />
-      <div className="range-slider-labels">
-        <span>{formatLabel(min)}</span>
-        <span className="range-current-value">{formatLabel(value)}</span>
-        <span>{formatLabel(max)}</span>
-      </div>
-    </div>
-  );
-}
-
 function PlaceDetailPanel({ place, activeTab, onTabChange, onPlanTrip, onClose }) {
   const tabs = ["Overview", "Places to Stay", "Things to do", "How to Reach", "More"];
 
@@ -640,59 +586,20 @@ function PlaceDetailPanel({ place, activeTab, onTabChange, onPlanTrip, onClose }
 export default function MainHome() {
   const navigate = useNavigate();
   const categoryScrollRef = useRef(null);
-  const fromRef = useRef(null);
   const loadMoreRef = useRef(null);
 
-  const [fromCity, setFromCity] = useState("");
-  const [travelMonth, setTravelMonth] = useState("Any Month");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
-  const [scope, setScope] = useState("all");
-  const [budgetMax, setBudgetMax] = useState(100000);
-  const [travelTimeMax, setTravelTimeMax] = useState(12);
-  const [weatherFilter, setWeatherFilter] = useState("all");
   const [visiblePlaceCount, setVisiblePlaceCount] = useState(PLACE_BATCH_SIZE);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [activePlaceTab, setActivePlaceTab] = useState("Overview");
 
-  useEffect(() => {
-    const handler = (event) => {
-      if (fromRef.current && !fromRef.current.contains(event.target)) {
-        setShowFromDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const filteredFromCities = useMemo(() => {
-    if (!fromCity.trim()) return FROM_CITIES;
-    return FROM_CITIES.filter((city) =>
-      city.toLowerCase().includes(fromCity.toLowerCase()),
-    );
-  }, [fromCity]);
-
   const filteredPlaces = useMemo(() => {
     return PLACES.filter((place) => {
       if (activeCategory !== "All" && !place.categories.includes(activeCategory)) return false;
-      if (scope === "nearby" && place.travelHours > 4) return false;
-      if (scope === "weekend" && place.travelHours > 7) return false;
-      if (scope === "long-trip" && place.travelHours <= 7) return false;
-      if (place.budget > budgetMax) return false;
-      if (place.travelHours > travelTimeMax) return false;
-      if (weatherFilter !== "all" && place.weather !== weatherFilter) return false;
-
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const searchable = `${place.name} ${place.state} ${place.country} ${place.categories.join(" ")}`.toLowerCase();
-        if (!searchable.includes(query)) return false;
-      }
 
       return true;
     });
-  }, [activeCategory, budgetMax, scope, searchQuery, travelTimeMax, weatherFilter]);
+  }, [activeCategory]);
 
   const visiblePlaces = useMemo(
     () => filteredPlaces.slice(0, visiblePlaceCount),
@@ -700,10 +607,6 @@ export default function MainHome() {
   );
 
   const hasMorePlaces = visiblePlaceCount < filteredPlaces.length;
-
-  useEffect(() => {
-    setVisiblePlaceCount(PLACE_BATCH_SIZE);
-  }, [activeCategory, budgetMax, scope, searchQuery, travelTimeMax, weatherFilter]);
 
   useEffect(() => {
     if (!hasMorePlaces || !loadMoreRef.current) return undefined;
@@ -726,8 +629,8 @@ export default function MainHome() {
   const handlePlanPlace = (place) => {
     navigate("/itinerary", {
       state: {
-        start_city: fromCity,
-        source: fromCity,
+        start_city: "",
+        source: "",
         destination: place.name,
         days: place.travelHours > 7 ? 5 : 3,
         interests: place.categories.join(", "),
@@ -762,173 +665,13 @@ export default function MainHome() {
     });
   };
 
-  const resetFilters = () => {
-    setScope("all");
-    setBudgetMax(100000);
-    setTravelTimeMax(12);
-    setWeatherFilter("all");
+  const clearDiscovery = () => {
     setActiveCategory("All");
-    setSearchQuery("");
-    setFromCity("");
-    setTravelMonth("Any Month");
   };
 
   return (
     <div className="explore-page">
-      <section className="explore-search-console">
-        <div className="search-console-inner">
-          <div className="console-field from-field" ref={fromRef}>
-            <span className="console-field-icon">PIN</span>
-            <div className="console-field-content">
-              <label className="console-field-label">From</label>
-              <input
-                type="text"
-                className="console-field-input"
-                placeholder="Select city"
-                value={fromCity}
-                onChange={(event) => {
-                  setFromCity(event.target.value);
-                  setShowFromDropdown(true);
-                }}
-                onFocus={() => setShowFromDropdown(true)}
-              />
-            </div>
-            {showFromDropdown && filteredFromCities.length > 0 && (
-              <div className="console-dropdown">
-                {filteredFromCities.map((city) => (
-                  <button
-                    type="button"
-                    key={city}
-                    className="console-dropdown-item"
-                    onClick={() => {
-                      setFromCity(city);
-                      setShowFromDropdown(false);
-                    }}
-                  >
-                    {city}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="console-divider" />
-
-          <div className="console-field month-field">
-            <span className="console-field-icon">CAL</span>
-            <div className="console-field-content">
-              <label className="console-field-label">Travel Month</label>
-              <select
-                className="console-field-select"
-                value={travelMonth}
-                onChange={(event) => setTravelMonth(event.target.value)}
-              >
-                {MONTHS.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="console-divider" />
-
-          <div className="console-field search-field">
-            <span className="console-field-icon">GO</span>
-            <div className="console-field-content">
-              <input
-                type="text"
-                className="console-field-input search-main-input"
-                placeholder="Search places..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <button className="ai-trip-btn" onClick={() => navigate("/itinerary")}>
-            <span className="ai-sparkle">AI</span>
-            Create trip with AI
-          </button>
-        </div>
-      </section>
-
       <div className="explore-content-layout">
-        <aside className="explore-filters-sidebar">
-          <div className="sidebar-header">
-            <h3 className="sidebar-title">Filters</h3>
-            <button className="reset-filters-btn" onClick={resetFilters}>
-              Reset All
-            </button>
-          </div>
-
-          <div className="filter-group">
-            <h4 className="filter-group-title">Scope</h4>
-            <div className="filter-chips">
-              {[
-                { key: "all", label: "All" },
-                { key: "nearby", label: "Nearby" },
-                { key: "weekend", label: "Weekend" },
-                { key: "long-trip", label: "Long Trip" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  className={`filter-chip ${scope === item.key ? "active" : ""}`}
-                  onClick={() => setScope(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <h4 className="filter-group-title">Budget Range</h4>
-            <RangeSlider
-              min={0}
-              max={100000}
-              step={5000}
-              value={budgetMax}
-              onChange={setBudgetMax}
-              formatLabel={(value) =>
-                value >= 100000 ? "Rs 1L+" : `Rs ${(value / 1000).toFixed(0)}K`
-              }
-            />
-          </div>
-
-          <div className="filter-group">
-            <h4 className="filter-group-title">Travel Time</h4>
-            <RangeSlider
-              min={0}
-              max={12}
-              step={1}
-              value={travelTimeMax}
-              onChange={setTravelTimeMax}
-              formatLabel={(value) => (value >= 12 ? "12h+" : `${value}h`)}
-            />
-          </div>
-
-          <div className="filter-group">
-            <h4 className="filter-group-title">Weather</h4>
-            <div className="filter-chips">
-              {[
-                { key: "all", label: "Any" },
-                { key: "rain", label: "Rain" },
-                { key: "no-rain", label: "No Rain" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  className={`filter-chip ${weatherFilter === item.key ? "active" : ""}`}
-                  onClick={() => setWeatherFilter(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </aside>
-
         <main className="explore-places-panel">
           {selectedPlace && (
             <PlaceDetailPanel
@@ -1052,10 +795,10 @@ export default function MainHome() {
           ) : (
             <div className="no-places-found">
               <span className="no-places-icon">No matches</span>
-              <h3>No places match your filters</h3>
-              <p>Try adjusting your filters or search query to discover more destinations.</p>
-              <button className="reset-filters-inline-btn" onClick={resetFilters}>
-                Reset All Filters
+              <h3>No places found</h3>
+              <p>Try a different destination, city, or experience category.</p>
+              <button className="reset-filters-inline-btn" onClick={clearDiscovery}>
+                Clear Search
               </button>
             </div>
           )}

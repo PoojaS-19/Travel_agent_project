@@ -64,7 +64,8 @@ export default function App() {
           <Link to="/hotels" className="nav-item">🏨 Hotels</Link>
           <Link to="/trainsearch" className="nav-item">🚆 Trains</Link>
           <Link to="/bussearch" className="nav-item">🚌 Buses</Link>
-          
+          <Link to="/itinerary" className="nav-item">AI Itinerary</Link>
+
           {/* MORE DROPDOWN */}
           <div 
             className="more-dropdown-wrapper"
