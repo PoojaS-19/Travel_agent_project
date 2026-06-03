@@ -1,9 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+import os
 
 # Database imports
 from app.database import engine, Base
+
+# Create uploads folder if not exists
+os.makedirs("uploads", exist_ok=True)
+
 
 # Router imports
 from app.routes.train_routes import router as train_router
@@ -37,15 +43,48 @@ async def startup_event():
         print("Database tables created/verified successfully")
         
         # Run dynamic migrations to ensure schema compatibility
-        with engine.connect() as conn:
-            # Check and add otp_code column to trip_invitations if missing
-            try:
+        # Check and add otp_code column to trip_invitations if missing
+        try:
+            with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN otp_code VARCHAR(6)"))
-                conn.commit()
                 print("Dynamic migration: Added 'otp_code' column to 'trip_invitations'")
+        except Exception:
+            pass
+
+        # Check and add columns to place_reviews if missing
+        place_reviews_cols = [
+            ("review_title", "VARCHAR(200)"),
+            ("additional_notes", "TEXT"),
+            ("would_visit_again", "BOOLEAN"),
+            ("traveler_type", "VARCHAR(50)"),
+            ("verified_status", "BOOLEAN DEFAULT FALSE"),
+            ("rating_safety", "INTEGER"),
+            ("rating_cleanliness", "INTEGER"),
+            ("rating_crowd", "INTEGER"),
+            ("rating_accessibility", "INTEGER"),
+            ("rating_scenic", "INTEGER"),
+            ("rating_family", "INTEGER"),
+            ("rating_food", "INTEGER"),
+            ("rating_transport", "INTEGER"),
+            ("rating_value", "INTEGER"),
+        ]
+        for col_name, col_type in place_reviews_cols:
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE place_reviews ADD COLUMN {col_name} {col_type}"))
+                    print(f"Dynamic migration: Added '{col_name}' column to 'place_reviews'")
             except Exception:
-                # Column already exists, safe to ignore
                 pass
+
+        # Check and add is_admin column to users if missing
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+                print("Dynamic migration: Added 'is_admin' column to 'users'")
+        except Exception:
+            pass
+
+
                 
     except Exception as e:
         print(f"Warning: Could not run startup database validation/migrations: {e}")
@@ -54,6 +93,65 @@ async def startup_event():
 @app.get("/")
 def home():
     return {"message": "AI Travel Agent API is working flawlessly!"}
+
+@app.get("/smtp-test")
+def smtp_test():
+    import socket
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port_str = os.getenv("SMTP_PORT", "587")
+    smtp_port = int(smtp_port_str) if smtp_port_str.isdigit() else 587
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    
+    results = {
+        "configured_host": smtp_host,
+        "configured_port": smtp_port,
+        "has_username": bool(smtp_username),
+        "has_password": bool(smtp_password),
+        "dns_resolution": {},
+        "tcp_connection": {}
+    }
+    
+    # 1. Test DNS Resolution
+    try:
+        ip_addresses = socket.getaddrinfo(smtp_host, smtp_port)
+        resolved_ips = list(set([ip[4][0] for ip in ip_addresses]))
+        results["dns_resolution"] = {
+            "status": "success",
+            "resolved_ips": resolved_ips
+        }
+    except Exception as e:
+        results["dns_resolution"] = {
+            "status": "failed",
+            "error": str(e)
+        }
+        
+    # 2. Test TCP connection
+    try:
+        print(f"[SMTP-DIAGNOSTIC] Attempting socket connection to {smtp_host}:{smtp_port}")
+        with socket.create_connection((smtp_host, smtp_port), timeout=10) as sock:
+            # Try to read the initial banner from the SMTP server
+            banner = sock.recv(1024).decode('utf-8', errors='ignore')
+            results["tcp_connection"] = {
+                "status": "success",
+                "message": "TCP Connection established successfully!",
+                "smtp_banner": banner.strip()
+            }
+    except Exception as e:
+        results["tcp_connection"] = {
+            "status": "failed",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+        
+    return results
+
+# --- Mount Uploads ---
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Router Registration ---
 app.include_router(auth_router)

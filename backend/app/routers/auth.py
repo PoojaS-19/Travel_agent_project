@@ -104,73 +104,84 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     
     Creates a new user and returns email verification details
     """
-    # Check if user already exists by email
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        if existing_user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        else:
-            db.delete(existing_user)
-            db.commit()
-    
-    # Check if username already exists
-    existing_username = db.query(User).filter(User.username == user_data.username).first()
-    if existing_username:
-        if existing_username.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
-            )
-        else:
-            db.delete(existing_username)
-            db.commit()
-    
-    # Hash password and create user
-    hashed_password = AuthService.hash_password(user_data.password)
-    
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        password_hash=hashed_password,
-        is_verified=False
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    if user_data.invite_token:
-        try:
-            CollaborationService(db).accept_invitation(user_data.invite_token, new_user.id)
-        except HTTPException:
-            raise
-        except Exception as invite_error:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Account created, but invite acceptance failed: {invite_error}"
-            )
-    
-    # Generate verification code
-    verification_code = AuthService.generate_verification_code(new_user.email)
-    
-    # Send actual email verification code via SMTP
-    delivery = EmailService.send_verification_otp(new_user.email, verification_code)
-    if not delivery.sent:
-        db.delete(new_user)
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
+    import traceback
+    print(f"[SIGNUP-LOG] Signup flow started for email: {user_data.email}, username: {user_data.username}")
+    try:
+        # Check if user already exists by email
+        existing_user = db.query(User).filter(User.email == user_data.email).first()
+        if existing_user:
+            if existing_user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered"
+                )
+            else:
+                db.delete(existing_user)
+                db.commit()
+        
+        # Check if username already exists
+        existing_username = db.query(User).filter(User.username == user_data.username).first()
+        if existing_username:
+            if existing_username.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken"
+                )
+            else:
+                db.delete(existing_username)
+                db.commit()
+        
+        # Hash password and create user
+        hashed_password = AuthService.hash_password(user_data.password)
+        
+        new_user = User(
+            username=user_data.username,
+            email=user_data.email,
+            password_hash=hashed_password,
+            is_verified=False
         )
-    
-    return SignupResponse(
-        message="Verification code sent to your email. Please check your inbox.",
-        verification_code="sent_to_email",
-        email=new_user.email
-    )
+        
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        if user_data.invite_token:
+            try:
+                CollaborationService(db).accept_invitation(user_data.invite_token, new_user.id)
+            except HTTPException:
+                raise
+            except Exception as invite_error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Account created, but invite acceptance failed: {invite_error}"
+                )
+        
+        # Generate verification code
+        print(f"[SIGNUP-LOG] Generating OTP for email: {new_user.email}")
+        verification_code = AuthService.generate_verification_code(new_user.email)
+        
+        # Send actual email verification code via SMTP
+        print(f"[SIGNUP-LOG] Calling EmailService.send_verification_otp() for email: {new_user.email} with code: {verification_code}")
+        delivery = EmailService.send_verification_otp(new_user.email, verification_code)
+        print(f"[SIGNUP-LOG] EmailService.send_verification_otp() returned sent={delivery.sent}, error={delivery.error}")
+        
+        if not delivery.sent:
+            db.delete(new_user)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Registration failed because the verification email could not be sent: {delivery.error}"
+            )
+        
+        return SignupResponse(
+            message="Verification code sent to your email. Please check your inbox.",
+            verification_code="sent_to_email",
+            email=new_user.email
+        )
+    except Exception as e:
+        print("[SIGNUP-LOG] Exception occurred in signup flow:")
+        traceback.print_exc()
+        raise
 
 
 @router.post("/verify-email", response_model=TokenResponse)

@@ -7,6 +7,7 @@ import "../App.css";
 import MapComponent from "../components/MapComponent";
 import { CITIES } from "../data/cities";
 import html2pdf from "html2pdf.js";
+import ReviewsModal from "../components/ReviewsModal";
 
 // --- AUTOCOMPLETE COMPONENT ---
 function CityAutocomplete({ placeholder, value, onChange }) {
@@ -259,100 +260,7 @@ function ImageCarousel({ placeName, destination }) {
   );
 }
 
-function ReviewForm({ place, destination, onClose }) {
-  const [rating, setRating] = useState(5);
-  const [review, setReview] = useState("");
-  const [tripType, setTripType] = useState("");
-  const [mood, setMood] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submitReview = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-    setLoading(true);
-    try {
-      await API.post("/api/reviews", {
-        place_name: place.place_name,
-        destination: destination,
-        rating: rating,
-        review: review || null,
-        category: place.category,
-        trip_type: tripType || null,
-        mood: mood || null,
-        lat: place.lat,
-        lon: place.lon
-      });
-      alert("Thank you for your review!");
-      onClose();
-    } catch (error) {
-      alert("Failed to submit review. Please try again.");
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="review-form">
-      <div className="form-group">
-        <label>Rating:</label>
-        <div className="rating-input">
-          {[1, 2, 3, 4, 5].map(star => (
-            <span
-              key={star}
-              className={`star ${rating >= star ? 'active' : ''}`}
-              onClick={() => setRating(star)}
-            >
-              ⭐
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>Review (optional):</label>
-        <textarea
-          value={review}
-          onChange={(e) => setReview(e.target.value)}
-          placeholder="Share your experience..."
-          rows={3}
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Trip Type:</label>
-        <select value={tripType} onChange={(e) => setTripType(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="solo">Solo</option>
-          <option value="friends">Friends</option>
-          <option value="family">Family</option>
-          <option value="couple">Couple</option>
-          <option value="business">Business</option>
-        </select>
-      </div>
-
-      <div className="form-group">
-        <label>Mood:</label>
-        <select value={mood} onChange={(e) => setMood(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="chill">Chill</option>
-          <option value="adventure">Adventure</option>
-          <option value="cultural">Cultural</option>
-          <option value="romantic">Romantic</option>
-          <option value="exciting">Exciting</option>
-        </select>
-      </div>
-
-      <div className="modal-actions">
-        <button onClick={onClose} className="cancel-btn">Cancel</button>
-        <button onClick={submitReview} disabled={loading} className="submit-btn">
-          {loading ? "Submitting..." : "Submit Review"}
-        </button>
-      </div>
-    </div>
-  );
-}
+// Legacy ReviewForm removed in favor of the new upgraded ReviewsModal
 
 function buildLocalFallbackItinerary(form) {
   const destination = form.destination || "your destination";
@@ -1283,18 +1191,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       )}
 
       {/* REVIEW MODAL */}
-      {reviewModal.isOpen && reviewModal.place && (
-        <div className="modal-overlay" onClick={() => setReviewModal({ isOpen: false, place: null })}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Rate {reviewModal.place.place_name}</h3>
-            <ReviewForm
-              place={reviewModal.place}
-              destination={form.destination}
-              onClose={() => setReviewModal({ isOpen: false, place: null })}
-            />
-          </div>
-        </div>
-      )}
+      <ReviewsModal
+        open={reviewModal.isOpen}
+        onClose={() => setReviewModal({ isOpen: false, place: null })}
+        itemName={reviewModal.place ? reviewModal.place.place_name : null}
+        reviewType="place"
+        destination={form.destination}
+      />
 
     </div>
   );

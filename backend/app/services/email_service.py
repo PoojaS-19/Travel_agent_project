@@ -40,7 +40,9 @@ class EmailService:
     @classmethod
     def is_configured(cls) -> bool:
         config = cls.get_config()
-        return bool(config["SMTP_HOST"] and config["SMTP_USERNAME"] and config["SMTP_PASSWORD"])
+        has_resend = bool(os.getenv("RESEND_API_KEY"))
+        has_smtp = bool(config["SMTP_HOST"] and config["SMTP_USERNAME"] and config["SMTP_PASSWORD"])
+        return has_resend or has_smtp
 
     @classmethod
     def _execute_smtp_send(cls, message: EmailMessage) -> None:
@@ -95,8 +97,45 @@ class EmailService:
         if not cls.is_configured():
             print(f"[email:not-configured] from={config['FROM_EMAIL']} to={to_email} subject={subject}")
             print(text_body or html_body)
-            return EmailDeliveryResult(sent=False, error="Email is not configured. Use the invite link below or configure SMTP.")
+            return EmailDeliveryResult(sent=False, error="Email is not configured. Configure RESEND_API_KEY or SMTP parameters.")
 
+        # Check for Resend API fallback
+        resend_api_key = os.getenv("RESEND_API_KEY")
+        if resend_api_key:
+            print(f"[EMAIL-LOG] RESEND_API_KEY is configured. Using Resend HTTP API for delivery to {to_email}...")
+            try:
+                from_email = config["FROM_EMAIL"]
+                if from_email == "noreply@tripai.local":
+                    from_email = "onboarding@resend.dev"
+                
+                import requests
+                url = "https://api.resend.com/emails"
+                headers = {
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "from": from_email,
+                    "to": to_email,
+                    "subject": subject,
+                    "html": html_body,
+                    "text": text_body or unescape(html_body)
+                }
+                print(f"[EMAIL-LOG] Posting payload to Resend: from={from_email}, to={to_email}, subject={subject}")
+                res = requests.post(url, json=payload, headers=headers, timeout=15)
+                print(f"[EMAIL-LOG] Resend API Response Status Code: {res.status_code}")
+                print(f"[EMAIL-LOG] Resend API Response Body: {res.text}")
+                
+                if res.status_code in (200, 201):
+                    return EmailDeliveryResult(sent=True)
+                else:
+                    return EmailDeliveryResult(sent=False, error=f"Resend API error (HTTP {res.status_code}): {res.text}")
+            except Exception as exc:
+                print(f"[EMAIL-LOG] Resend API call failed: {exc}")
+                traceback.print_exc()
+                return EmailDeliveryResult(sent=False, error=f"Resend API delivery failed: {exc}")
+
+        # Fallback to standard SMTP
         message = EmailMessage()
         message["From"] = config["FROM_EMAIL"]
         message["To"] = to_email
