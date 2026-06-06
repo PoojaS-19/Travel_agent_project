@@ -4,6 +4,14 @@ import sys
 BASE_URL = "http://127.0.0.1:8000"
 
 def run_tests():
+    # Pre-clean database in case of leftover user from previous runs
+    import sqlite3
+    conn = sqlite3.connect("travel_planner.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE email = 'testuser_temp@example.com'")
+    conn.commit()
+    conn.close()
+
     print("--- 1. Testing Unverified User Signup Re-registration ---")
     
     # Payload for signup

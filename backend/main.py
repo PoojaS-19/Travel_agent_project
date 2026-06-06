@@ -46,6 +46,16 @@ async def startup_event():
             # Column might already exist
             pass
 
+        # Ensure 'FOLLOWER' is added to 'collaboratorrole' type if using PostgreSQL
+        try:
+            if engine.dialect.name == "postgresql":
+                with engine.connect() as conn:
+                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+                    conn.execute(text("ALTER TYPE collaboratorrole ADD VALUE IF NOT EXISTS 'FOLLOWER'"))
+                    print("Dynamic migration: Added 'FOLLOWER' to 'collaboratorrole' enum successfully")
+        except Exception as enum_error:
+            print(f"Warning: Could not add FOLLOWER to collaboratorrole enum: {enum_error}")
+
         # Ensure itinerary_text in itineraries is of type TEXT (for long AI generated content)
         try:
             with engine.begin() as conn:

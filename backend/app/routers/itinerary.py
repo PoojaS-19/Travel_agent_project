@@ -66,13 +66,29 @@ def serialize_itinerary(itinerary: Itinerary) -> dict:
 def serialize_itinerary_with_access(itinerary: Itinerary, user_id: int, role: str = None) -> dict:
     data = serialize_itinerary(itinerary)
     access_role = role or ("owner" if itinerary.user_id == user_id else "viewer")
+    
+    # Serialize collaborators/members
+    members = []
+    try:
+        # Access collaborators relationship
+        for c in itinerary.collaborators:
+            members.append({
+                "username": c.user.username if c.user else "Unknown User",
+                "email": c.user.email if c.user else "unknown@example.com",
+                "role": c.role.value if hasattr(c.role, "value") else str(c.role)
+            })
+    except Exception as e:
+        print("Error serializing collaborators in itinerary:", e)
+
     data.update({
         "owner_user_id": itinerary.user_id,
         "collaboration_role": access_role,
         "is_shared": itinerary.user_id != user_id,
         "can_edit": itinerary.user_id == user_id,
+        "members": members,
     })
     return data
+
 
 # --- Schemas ---
 

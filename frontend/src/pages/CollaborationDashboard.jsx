@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+import api from "../api";
 import ActivityRanking from "../components/collaboration/ActivityRanking";
 import DecisionSummary from "../components/collaboration/DecisionSummary";
 import InviteMembersModal from "../components/collaboration/InviteMembersModal";
@@ -66,6 +67,96 @@ export default function CollaborationDashboard() {
   const [manualDesc, setManualDesc] = useState("");
 
   const [selectedSimPlaceIndex, setSelectedSimPlaceIndex] = useState(0);
+
+  const [followers, setFollowers] = useState([
+    { email: "", invited: false, verified: false, otp: "", message: "", error: "", loadingInvite: false, loadingVerify: false }
+  ]);
+  const [showFollowersCard, setShowFollowersCard] = useState(false);
+
+  const addFollowerField = () => {
+    setFollowers([...followers, { email: "", invited: false, verified: false, otp: "", message: "", error: "", loadingInvite: false, loadingVerify: false }]);
+  };
+
+  const handleFollowerEmailChange = (index, value) => {
+    const updated = [...followers];
+    updated[index].email = value;
+    setFollowers(updated);
+  };
+
+  const handleFollowerOtpChange = (index, value) => {
+    const updated = [...followers];
+    updated[index].otp = value;
+    setFollowers(updated);
+  };
+
+  const handleSendInvite = async (index) => {
+    const follower = followers[index];
+    if (!follower.email) {
+      const updated = [...followers];
+      updated[index].error = "Please enter a valid email address.";
+      setFollowers(updated);
+      return;
+    }
+    const updated = [...followers];
+    updated[index].loadingInvite = true;
+    updated[index].error = "";
+    updated[index].message = "";
+    setFollowers(updated);
+
+    try {
+      await actions.inviteMembers([follower.email], "follower");
+      const updatedSuccess = [...followers];
+      updatedSuccess[index].invited = true;
+      updatedSuccess[index].message = "Verification code sent to email.";
+      updatedSuccess[index].loadingInvite = false;
+      setFollowers(updatedSuccess);
+    } catch (err) {
+      console.error("Invite follower error:", err);
+      const updatedErr = [...followers];
+      updatedErr[index].error = err.response?.data?.detail || "Could not send invite.";
+      updatedErr[index].loadingInvite = false;
+      setFollowers(updatedErr);
+    }
+  };
+
+  const handleVerifyOtp = async (index) => {
+    const follower = followers[index];
+    if (follower.otp.length !== 6) {
+      const updated = [...followers];
+      updated[index].error = "Please enter a 6-digit verification code.";
+      setFollowers(updated);
+      return;
+    }
+
+    const updated = [...followers];
+    updated[index].loadingVerify = true;
+    updated[index].error = "";
+    updated[index].message = "";
+    setFollowers(updated);
+
+    try {
+      await api.post("/api/collaboration/invitations/accept-otp", {
+        otp_code: follower.otp
+      });
+      const updatedSuccess = [...followers];
+      updatedSuccess[index].verified = true;
+      updatedSuccess[index].message = "Follower linked successfully!";
+      updatedSuccess[index].loadingVerify = false;
+      setFollowers(updatedSuccess);
+      actions.reload();
+    } catch (err) {
+      console.error("Verify OTP error:", err);
+      const updatedErr = [...followers];
+      updatedErr[index].error = err.response?.data?.detail || "Invalid code or user not registered.";
+      updatedErr[index].loadingVerify = false;
+      setFollowers(updatedErr);
+    }
+  };
+
+  const handleDoneFinalizing = () => {
+    setShowFollowersCard(false);
+    alert("Followers linking process finished.");
+  };
 
   const canEdit = dashboard?.my_role === "owner" || dashboard?.my_role === "editor";
   const isOwner = dashboard?.my_role === "owner";
@@ -212,9 +303,12 @@ export default function CollaborationDashboard() {
         <div className="hero-actions">
           <button onClick={() => setInviteOpen(true)} disabled={!isOwner}>Invite Buddies</button>
           {isOwner && (
-            <button onClick={() => actions.setVotingLocked(!dashboard?.voting_locked)}>
-              {dashboard?.voting_locked ? "Unlock voting" : "Lock voting"}
-            </button>
+            <>
+              <button onClick={() => setShowFollowersCard(true)} style={{ background: "#10b981" }}>Link Followers</button>
+              <button onClick={() => actions.setVotingLocked(!dashboard?.voting_locked)}>
+                {dashboard?.voting_locked ? "Unlock voting" : "Lock voting"}
+              </button>
+            </>
           )}
         </div>
       </section>
@@ -245,6 +339,131 @@ export default function CollaborationDashboard() {
           </div>
         ))}
       </section>
+
+      {showFollowersCard && isOwner && (
+        <section className="collab-section" style={{ maxWidth: "1180px", margin: "0 auto 18px" }}>
+          <div className="link-follower-card" style={{
+            maxWidth: "650px",
+            margin: "20px auto",
+            background: "rgba(255, 255, 255, 0.95)",
+            padding: "25px",
+            borderRadius: "16px",
+            boxShadow: "0 6px 30px rgba(0, 0, 0, 0.15)",
+            border: "1px solid #e2e8f0"
+          }}>
+            <h3 style={{ marginTop: 0, color: "#1e293b", fontSize: "20px", fontWeight: "600", marginBottom: "10px", textAlign: "center" }}>Link Follower (Optional)</h3>
+            <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px", textAlign: "center" }}>
+              Add travel buddies to your trip. They will be linked as followers. Send the invite code to their email, enter the code below to verify them, and click **Done** when finished.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginBottom: "20px" }}>
+              {followers.map((follower, index) => (
+                <div key={index} style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  position: "relative"
+                }}>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: "15px", color: "#334155" }}>Buddy #{index + 1}</h4>
+                  
+                  {/* Email Input row */}
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <input
+                      type="email"
+                      placeholder="Follower's Email Address"
+                      value={follower.email}
+                      onChange={(e) => handleFollowerEmailChange(index, e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "14px"
+                      }}
+                      disabled={follower.invited}
+                      required
+                    />
+                    {!follower.invited && (
+                      <button
+                        type="button"
+                        disabled={follower.loadingInvite}
+                        onClick={() => handleSendInvite(index)}
+                        className="saved-trip-primary-btn"
+                        style={{ padding: "10px 18px", fontSize: "13px" }}
+                      >
+                        {follower.loadingInvite ? "Sending..." : "Send Invite"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Verification Row (only visible if invited and not verified) */}
+                  {follower.invited && !follower.verified && (
+                    <div style={{ marginTop: "12px", display: "flex", gap: "10px", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        placeholder="6-digit OTP Code"
+                        maxLength={6}
+                        value={follower.otp}
+                        onChange={(e) => handleFollowerOtpChange(index, e.target.value.replace(/\D/g, ""))}
+                        style={{
+                          width: "140px",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "14px"
+                        }}
+                        disabled={follower.loadingVerify}
+                      />
+                      <button
+                        type="button"
+                        disabled={follower.loadingVerify}
+                        onClick={() => handleVerifyOtp(index)}
+                        className="saved-trip-primary-btn"
+                        style={{ padding: "10px 18px", fontSize: "13px", background: "#10b981" }}
+                      >
+                        {follower.loadingVerify ? "Verifying..." : "Verify Code"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Status / Success Messages */}
+                  {follower.message && (
+                    <div style={{ marginTop: "10px", color: "#16a34a", fontSize: "13px", fontWeight: "500" }}>
+                      ✓ {follower.message}
+                    </div>
+                  )}
+                  {follower.error && (
+                    <div style={{ marginTop: "10px", color: "#dc2626", fontSize: "13px", fontWeight: "500" }}>
+                      ⚠ {follower.error}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={addFollowerField}
+                className="saved-trip-secondary-btn"
+                style={{ padding: "10px 18px" }}
+              >
+                + Add More Buddy
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleDoneFinalizing}
+                className="saved-trip-primary-btn"
+                style={{ padding: "10px 24px", background: "#4f46e5" }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 2. Live Location Map & Leader Location Simulator */}
       <section className="map-container-wrapper">

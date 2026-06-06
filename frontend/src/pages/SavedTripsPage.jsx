@@ -87,8 +87,10 @@ export default function SavedTripsPage() {
           const found = loadedTrips.find((trip) => trip.id === Number(tripIdFromUrl));
           if (found) return found;
         }
-        if (!current) return loadedTrips[0];
-        return loadedTrips.find((trip) => trip.id === current.id) || loadedTrips[0];
+        if (current) {
+          return loadedTrips.find((trip) => trip.id === current.id) || null;
+        }
+        return null;
       });
     } catch (err) {
       console.error("Saved trips error:", err);
@@ -286,21 +288,7 @@ export default function SavedTripsPage() {
                     }}
                   >
                     <strong>{trip.destination || "Untitled Trip"}</strong>
-                    <span>{trip.start_city || "Starting city not set"}</span>
-                    <small>{new Date(trip.created_at).toLocaleDateString()}</small>
                   </button>
-                  <button
-                    type="button"
-                    className="saved-trip-card-collaborate"
-                    onClick={() => navigate(`/collaborate/${trip.id}`)}
-                  >
-                    Collaborate
-                  </button>
-                  {trip.is_shared && (
-                    <small className="saved-trip-shared-badge">
-                      Shared with you - {trip.collaboration_role}
-                    </small>
-                  )}
                 </div>
               ))}
             </div>
@@ -326,6 +314,51 @@ export default function SavedTripsPage() {
                     <p className="saved-trip-shared-note">
                       Shared with you as {selectedTrip.collaboration_role}. Open Collaborate to plan with the group.
                     </p>
+                  )}
+                  {selectedTrip.members && selectedTrip.members.length > 0 && (
+                    <div className="saved-trip-members" style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px", marginBottom: "12px" }}>
+                      {selectedTrip.members.map((member, idx) => (
+                        <div 
+                          key={idx} 
+                          className="trip-member-chip" 
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            background: "rgba(255, 255, 255, 0.08)",
+                            padding: "6px 12px",
+                            borderRadius: "20px",
+                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                            fontSize: "13px",
+                            color: "white"
+                          }}
+                        >
+                          <span style={{ 
+                            background: member.role.toLowerCase() === "owner" ? "#fee2e2" : "#dbeafe", 
+                            color: member.role.toLowerCase() === "owner" ? "#b91c1c" : "#1e3a8a",
+                            borderRadius: "50%",
+                            width: "24px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: "bold",
+                            fontSize: "12px",
+                            flexShrink: 0
+                          }}>
+                            {member.role.toLowerCase() === "owner" ? "👑" : (member.username?.slice(0, 1).toUpperCase() || member.email?.slice(0, 1).toUpperCase())}
+                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                            <strong style={{ fontWeight: "600", color: "white" }}>
+                              {member.username || member.email || "Unknown User"}
+                            </strong>
+                            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
+                              {member.role.toLowerCase() === "owner" ? "Leader" : member.role.toLowerCase() === "follower" ? "Buddy (Follower)" : member.role.toLowerCase() === "editor" ? "Editor" : member.role}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <p>
                     From {selectedTrip.start_city || "not specified"} · Saved{" "}
