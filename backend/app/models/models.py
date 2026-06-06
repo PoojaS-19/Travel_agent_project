@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, ForeignKey, DECIMAL, TIME, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, ForeignKey, DECIMAL, TIME, Boolean, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -129,7 +129,7 @@ class Itinerary(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     start_city = Column(String(100), nullable=True)
     destination = Column(String(100), nullable=True)
-    itinerary_text = Column(String(1000), nullable=True)
+    itinerary_text = Column(Text, nullable=True)
     daily_plans = Column(JSON, nullable=True)
     language = Column(String(20), default="English")
     created_at = Column(DateTime, default=datetime.utcnow)

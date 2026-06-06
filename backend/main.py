@@ -37,15 +37,23 @@ async def startup_event():
         print("Database tables created/verified successfully")
         
         # Run dynamic migrations to ensure schema compatibility
-        with engine.connect() as conn:
-            # Check and add otp_code column to trip_invitations if missing
-            try:
+        # Check and add otp_code column to trip_invitations if missing
+        try:
+            with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN otp_code VARCHAR(6)"))
-                conn.commit()
                 print("Dynamic migration: Added 'otp_code' column to 'trip_invitations'")
-            except Exception:
-                # Column already exists, safe to ignore
-                pass
+        except Exception as otp_error:
+            # Column might already exist
+            pass
+
+        # Ensure itinerary_text in itineraries is of type TEXT (for long AI generated content)
+        try:
+            with engine.begin() as conn:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE itineraries ALTER COLUMN itinerary_text TYPE TEXT"))
+                    print("Dynamic migration: Altered 'itinerary_text' column to TYPE TEXT")
+        except Exception as migration_error:
+            print(f"Warning: Could not run dynamic migration for itinerary_text: {migration_error}")
                 
     except Exception as e:
         print(f"Warning: Could not run startup database validation/migrations: {e}")

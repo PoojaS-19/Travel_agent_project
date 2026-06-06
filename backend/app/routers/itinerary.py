@@ -243,6 +243,10 @@ Now generate the JSON for the user's inputs.
                     itinerary_id = itinerary_db.id
                 except Exception as save_error:
                     print("Failed to save itinerary:", save_error)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to save generated itinerary to database: {str(save_error)}"
+                    )
 
             if itinerary_id:
                 data["id"] = itinerary_id
@@ -503,6 +507,10 @@ Now respond to the user's latest message as JSON:
                         )
                     except Exception as save_error:
                         print("Failed to save chatbot itinerary:", save_error)
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Failed to save chatbot itinerary to database: {str(save_error)}"
+                        )
 
             return parsed
         except Exception:
@@ -632,6 +640,7 @@ If the question is not travel-related, politely refuse.
                         )
                 except Exception as save_error:
                     print("Failed to save streamed chatbot itinerary:", save_error)
+                    yield f"data: {json.dumps({'error': f'Failed to save streamed chatbot itinerary: {str(save_error)}'})}\n\n"
 
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
