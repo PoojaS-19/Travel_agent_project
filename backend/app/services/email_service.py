@@ -1,4 +1,5 @@
 import os
+import requests
 import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -13,7 +14,7 @@ class EmailDeliveryResult:
 
 
 class EmailService:
-    """SMTP email boundary with a development fallback."""
+    """SMTP or Resend email service with provider switching."""
 
     FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@tripai.local")
     SMTP_HOST = os.getenv("SMTP_HOST")
@@ -21,9 +22,13 @@ class EmailService:
     SMTP_USERNAME = os.getenv("SMTP_USERNAME")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
     SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "smtp").lower()
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
     @classmethod
     def is_configured(cls) -> bool:
+        if cls.EMAIL_PROVIDER == "resend":
+            return bool(cls.RESEND_API_KEY)
         return bool(cls.SMTP_HOST and cls.SMTP_USERNAME and cls.SMTP_PASSWORD)
 
     @classmethod
@@ -31,25 +36,62 @@ class EmailService:
         if not cls.is_configured():
             print(f"[email:not-configured] from={cls.FROM_EMAIL} to={to_email} subject={subject}")
             print(text_body or html_body)
-            return EmailDeliveryResult(sent=False, error="Email is not configured. Use the invite link below or configure SMTP.")
+            return EmailDeliveryResult(sent=False, error="Email is not configured. Use the invite link below or configure SMTP/Resend.")
 
-        message = EmailMessage()
-        message["From"] = cls.FROM_EMAIL
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.set_content(text_body or unescape(html_body))
-        message.add_alternative(html_body, subtype="html")
+        if cls.EMAIL_PROVIDER == "resend":
+            print(f"[email:provider-selected] provider=resend to={to_email} subject={subject}")
+            try:
+                headers = {
+                    "Authorization": f"Bearer {cls.RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "from": cls.FROM_EMAIL,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_body,
+                }
+                if text_body:
+                    payload["text"] = text_body
 
-        try:
-            with smtplib.SMTP(cls.SMTP_HOST, cls.SMTP_PORT, timeout=15) as smtp:
-                if cls.SMTP_USE_TLS:
-                    smtp.starttls()
-                smtp.login(cls.SMTP_USERNAME, cls.SMTP_PASSWORD)
-                smtp.send_message(message)
-            return EmailDeliveryResult(sent=True)
-        except Exception as exc:
-            print(f"[email:failed] to={to_email} subject={subject} error={exc}")
-            return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
+                response = requests.post(
+                    "https://api.resend.com/emails",
+                    json=payload,
+                    headers=headers,
+                    timeout=15
+                )
+
+                if response.status_code in (200, 201, 202):
+                    print(f"[email:success] provider=resend to={to_email} subject={subject}")
+                    return EmailDeliveryResult(sent=True)
+                else:
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                    print(f"[email:failed] provider=resend to={to_email} subject={subject} error={error_msg}")
+                    return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {error_msg}")
+            except Exception as exc:
+                print(f"[email:failed] provider=resend to={to_email} subject={subject} error={exc}")
+                return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
+
+        else:
+            print(f"[email:provider-selected] provider=smtp to={to_email} subject={subject}")
+            message = EmailMessage()
+            message["From"] = cls.FROM_EMAIL
+            message["To"] = to_email
+            message["Subject"] = subject
+            message.set_content(text_body or unescape(html_body))
+            message.add_alternative(html_body, subtype="html")
+
+            try:
+                with smtplib.SMTP(cls.SMTP_HOST, cls.SMTP_PORT, timeout=15) as smtp:
+                    if cls.SMTP_USE_TLS:
+                        smtp.starttls()
+                    smtp.login(cls.SMTP_USERNAME, cls.SMTP_PASSWORD)
+                    smtp.send_message(message)
+                print(f"[email:success] provider=smtp to={to_email} subject={subject}")
+                return EmailDeliveryResult(sent=True)
+            except Exception as exc:
+                print(f"[email:failed] provider=smtp to={to_email} subject={subject} error={exc}")
+                return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
 
     @classmethod
     def send_trip_invitation(cls, to_email: str, trip_name: str, inviter_name: str, invite_link: str) -> EmailDeliveryResult:
