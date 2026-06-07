@@ -104,6 +104,7 @@ function ChangeMapView({ center }) {
 export default function CollaborationDashboard() {
   const { tripId } = useParams();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [progressionLoading, setProgressionLoading] = useState(false);
   const {
     dashboard,
     suggestions,
@@ -777,6 +778,233 @@ export default function CollaborationDashboard() {
           </div>
         ))}
       </section>
+
+      {/* Advanced Itinerary Progress System Section (Phase 1 - Read-Only) */}
+      {/* Advanced Itinerary Progress System Section (Phase 2) */}
+      {itinerary?.daily_plans && itinerary.daily_plans.length > 0 && (
+        <section className="itinerary-progress-section collab-section">
+          <h3>📋 Itinerary Progress Dashboard</h3>
+          <div className="progress-grid">
+            
+            {/* Left Column: Current Destination & Progress Bar */}
+            <div className="progress-main-col">
+              {/* Current Destination Card */}
+              {(() => {
+                const allActs = [];
+                itinerary.daily_plans.forEach((dayPlan) => {
+                  (dayPlan.activities || []).forEach((activity) => {
+                    allActs.push({
+                      ...activity,
+                      day: dayPlan.day,
+                      date: dayPlan.date
+                    });
+                  });
+                });
+
+                if (allActs.length === 0) return null;
+
+                const hasAnyStatus = allActs.some(a => a.status === "current" || a.status === "completed" || a.status === "skipped");
+                let curIdx = allActs.findIndex(a => a.status === "current");
+                const isTripCompleted = hasAnyStatus && curIdx === -1 && allActs.every(a => a.status === "completed" || a.status === "skipped");
+
+                if (curIdx === -1 && !isTripCompleted) {
+                  curIdx = 0;
+                }
+
+                if (isTripCompleted) {
+                  const completedCount = allActs.filter(a => a.status === "completed").length;
+                  const skippedCount = allActs.filter(a => a.status === "skipped").length;
+                  const activeTotal = allActs.length - skippedCount;
+                  return (
+                    <div className="current-destination-card trip-completed">
+                      <span className="card-header-label">Trip State</span>
+                      <h4 className="card-place-name">
+                        🎉 Trip Completed!
+                      </h4>
+                      <div className="card-meta-grid">
+                        <div className="card-meta-item">
+                          <span className="card-meta-title">Status</span>
+                          <span className="card-meta-value" style={{ color: "#34d399" }}>Completed</span>
+                        </div>
+                        <div className="card-meta-item">
+                          <span className="card-meta-title">Destinations</span>
+                          <span className="card-meta-value">{completedCount} of {activeTotal}</span>
+                        </div>
+                        <div className="card-meta-item">
+                          <span className="card-meta-title">Skipped</span>
+                          <span className="card-meta-value">{skippedCount} skipped</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const currentAct = allActs[curIdx];
+
+                const handleComplete = async () => {
+                  if (progressionLoading) return;
+                  setProgressionLoading(true);
+                  try {
+                    await actions.completeDestination(currentAct.place_name);
+                  } catch (err) {
+                    console.error(err);
+                    alert(err.response?.data?.detail || "Failed to complete destination.");
+                  } finally {
+                    setProgressionLoading(false);
+                  }
+                };
+
+                const handleSkip = async () => {
+                  if (progressionLoading) return;
+                  setProgressionLoading(true);
+                  try {
+                    await actions.skipDestination(currentAct.place_name);
+                  } catch (err) {
+                    console.error(err);
+                    alert(err.response?.data?.detail || "Failed to skip destination.");
+                  } finally {
+                    setProgressionLoading(false);
+                  }
+                };
+
+                return (
+                  <div className="current-destination-card">
+                    <span className="card-header-label">Current Destination</span>
+                    <h4 className="card-place-name">
+                      📍 {currentAct.place_name || "Unknown Location"}
+                    </h4>
+                    
+                    <div className="card-meta-grid">
+                      <div className="card-meta-item">
+                        <span className="card-meta-title">Status</span>
+                        <span className="card-meta-value status-active">Active</span>
+                      </div>
+                      <div className="card-meta-item">
+                        <span className="card-meta-title">Destination</span>
+                        <span className="card-meta-value">
+                          {curIdx + 1} of {allActs.length}
+                        </span>
+                      </div>
+                      <div className="card-meta-item">
+                        <span className="card-meta-title">Day</span>
+                        <span className="card-meta-value">{currentAct.day}</span>
+                      </div>
+                    </div>
+
+                    {canEdit && (
+                      <div className="progression-actions">
+                        <button
+                          onClick={handleComplete}
+                          disabled={progressionLoading}
+                          className="progression-btn-complete"
+                        >
+                          {progressionLoading ? "Updating..." : "✓ Mark Completed"}
+                        </button>
+                        <button
+                          onClick={handleSkip}
+                          disabled={progressionLoading}
+                          className="progression-btn-skip"
+                        >
+                          {progressionLoading ? "Updating..." : "⏭ Skip"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Trip Progress Bar */}
+              {(() => {
+                const allActs = [];
+                itinerary.daily_plans.forEach((dayPlan) => {
+                  (dayPlan.activities || []).forEach((activity) => {
+                    allActs.push(activity);
+                  });
+                });
+
+                const skippedCount = allActs.filter(a => a.status === "skipped").length;
+                const completedCount = allActs.filter(a => a.status === "completed").length;
+                const activeTotal = allActs.length - skippedCount;
+                const percentage = activeTotal > 0 ? Math.round((completedCount / activeTotal) * 100) : 0;
+
+                const filledWidth = Math.round(percentage / 10);
+                const emptyWidth = 10 - filledWidth;
+                const filledBlocks = "█".repeat(filledWidth);
+                const emptyBlocks = "░".repeat(emptyWidth);
+
+                return (
+                  <div className="trip-progress-box">
+                    <div className="progress-box-header">
+                      <span className="progress-title">Trip Progress</span>
+                      <span className="progress-percentage">{percentage}%</span>
+                    </div>
+
+                    <div className="progress-bar-container">
+                      <div className="progress-bar-fill" style={{ width: `${percentage}%` }}></div>
+                    </div>
+
+                    <div className="retro-progress-bar">
+                      <span className="retro-progress-filled">{filledBlocks}</span>
+                      <span>{emptyBlocks}</span>
+                    </div>
+
+                    <div className="progress-info-text">
+                      <strong>{completedCount}</strong> of <strong>{activeTotal}</strong> destinations completed {skippedCount > 0 && <span className="skipped-note" style={{ color: "#64748b", fontSize: "11px", marginLeft: "4px" }}>({skippedCount} skipped)</span>}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Right Column: Visual Timeline */}
+            <div className="progress-timeline-col">
+              <div className="timeline-days-wrapper">
+                {itinerary.daily_plans.map((dayPlan) => {
+                  const dayActivities = dayPlan.activities || [];
+                  if (dayActivities.length === 0) return null;
+
+                  return (
+                    <div key={dayPlan.day} className="timeline-day-block">
+                      <h4>Day {dayPlan.day}{dayPlan.date ? ` · ${dayPlan.date}` : ""}</h4>
+                      
+                      <div className="timeline-activities">
+                        {dayActivities.map((activity, actIdx) => {
+                          const status = activity.status || "upcoming";
+                          
+                          let statusIcon = "○";
+                          if (status === "completed") statusIcon = "✓";
+                          else if (status === "current") statusIcon = "➜";
+                          else if (status === "skipped") statusIcon = "✕";
+
+                          return (
+                            <div 
+                              key={actIdx} 
+                              className={`timeline-activity-row ${status}`}
+                            >
+                              <span className={`timeline-status-icon ${status}`}>
+                                {statusIcon}
+                              </span>
+                              <div className="timeline-activity-info">
+                                <div className="timeline-activity-title">
+                                  {activity.place_name || "Activity"}
+                                </div>
+                                <div className="timeline-activity-time">
+                                  {activity.time || "Flexible"}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        </section>
+      )}
 
       {showFollowersCard && isOwner && (
         <section className="collab-section" style={{ maxWidth: "1180px", margin: "0 auto 18px" }}>

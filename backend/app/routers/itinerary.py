@@ -51,14 +51,17 @@ def get_user_interest_hint(db: Session, user_id: int) -> str:
 
     return "The user has previously shown interest in trips to " + ", ".join(seen[:3]) + "."
 
+from app.services.database_service import ItineraryService, normalize_daily_plans
+
 def serialize_itinerary(itinerary: Itinerary) -> dict:
     """Convert an itinerary model to an API response dict."""
+    normalized_plans = normalize_daily_plans(itinerary.daily_plans)
     return {
         "id": itinerary.id,
         "start_city": itinerary.start_city,
         "destination": itinerary.destination,
         "itinerary_text": itinerary.itinerary_text,
-        "daily_plans": itinerary.daily_plans,
+        "daily_plans": normalized_plans,
         "language": itinerary.language,
         "created_at": itinerary.created_at.isoformat(),
     }
@@ -243,6 +246,8 @@ Now generate the JSON for the user's inputs.
                 clean_content = clean_content[:-3]
             
             data = json.loads(clean_content)
+            if isinstance(data, dict) and "daily_plans" in data:
+                data["daily_plans"] = normalize_daily_plans(data["daily_plans"])
 
             itinerary_id = None
             if user_id and isinstance(data, dict) and data.get("itinerary_text") and data.get("daily_plans"):
@@ -511,6 +516,7 @@ Now respond to the user's latest message as JSON:
             if user_id and isinstance(parsed, dict):
                 plan_payload = parsed.get("plan_data") if isinstance(parsed.get("plan_data"), dict) else parsed
                 if plan_payload and plan_payload.get("destination") and plan_payload.get("daily_plans"):
+                    plan_payload["daily_plans"] = normalize_daily_plans(plan_payload["daily_plans"])
                     try:
                         ItineraryService.create_itinerary(
                             db=db,
@@ -740,6 +746,8 @@ The JSON structure must be exactly:
             
         parsed = json.loads(raw.strip())
         parsed["itinerary_text"] = itinerary_text + "\n" + parsed.get("itinerary_text", "")
+        if "daily_plans" in parsed:
+            parsed["daily_plans"] = normalize_daily_plans(parsed["daily_plans"])
         return parsed
     except Exception:
         return {

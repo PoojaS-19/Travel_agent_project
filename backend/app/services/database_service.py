@@ -90,6 +90,43 @@ class TrainService:
         ).all()
 
 
+def normalize_daily_plans(daily_plans):
+    """Normalize daily_plans list to ensure every activity has a status.
+    First activity becomes current, remaining activities become upcoming.
+    """
+    if not isinstance(daily_plans, list):
+        return daily_plans
+    
+    # Check if any activity in the entire itinerary has a status
+    has_any_status = False
+    for day in daily_plans:
+        if isinstance(day, dict) and "activities" in day:
+            activities = day["activities"]
+            if isinstance(activities, list):
+                for act in activities:
+                    if isinstance(act, dict) and "status" in act:
+                        has_any_status = True
+                        break
+    
+    first = True
+    for day in daily_plans:
+        if isinstance(day, dict) and "activities" in day:
+            activities = day["activities"]
+            if isinstance(activities, list):
+                for act in activities:
+                    if isinstance(act, dict):
+                        if not has_any_status:
+                            if first:
+                                act["status"] = "current"
+                                first = False
+                            else:
+                                act["status"] = "upcoming"
+                        else:
+                            if "status" not in act:
+                                act["status"] = "upcoming"
+    return daily_plans
+
+
 class ItineraryService:
     """Itinerary database operations"""
     
@@ -97,12 +134,13 @@ class ItineraryService:
     def create_itinerary(db: Session, user_id: int, start_city: str, destination: str,
                         itinerary_text: str, daily_plans: dict, language: str = "English"):
         """Create a new itinerary"""
+        normalized_plans = normalize_daily_plans(daily_plans)
         itinerary = Itinerary(
             user_id=user_id,
             start_city=start_city,
             destination=destination,
             itinerary_text=itinerary_text,
-            daily_plans=daily_plans,
+            daily_plans=normalized_plans,
             language=language
         )
         db.add(itinerary)
@@ -129,6 +167,9 @@ class ItineraryService:
     @staticmethod
     def update_itinerary(db: Session, itinerary: Itinerary, updates: dict):
         """Update an existing itinerary"""
+        if "daily_plans" in updates:
+            updates["daily_plans"] = normalize_daily_plans(updates["daily_plans"])
+            
         for field, value in updates.items():
             setattr(itinerary, field, value)
         db.commit()

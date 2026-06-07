@@ -202,6 +202,83 @@ def test_expenses_and_splitting(leader_token, buddy_token, itinerary_id):
     assert float(data["splits"][0]["amount"]) == 100.0
     print("Expense splits calculations: PASSED")
 
+def test_itinerary_progression(leader_token, buddy_token, itinerary_id):
+    print("\n--- 6. Testing itinerary progression mechanics, duplicate protection, and end-of-trip logs ---")
+    headers_leader = {"Authorization": f"Bearer {leader_token}"}
+    headers_buddy = {"Authorization": f"Bearer {buddy_token}"}
+    
+    # Check initial statuses after normalization
+    res = requests.get(f"{BASE_URL}/itineraries/{itinerary_id}", headers=headers_leader)
+    assert res.status_code == 200
+    plans = res.json()["daily_plans"]
+    act1 = plans[0]["activities"][0]
+    act2 = plans[0]["activities"][1]
+    
+    # After normalization, first activity should be 'current', second should be 'upcoming'
+    assert act1["status"] == "current"
+    assert act2["status"] == "upcoming"
+    print("Initial status checks (current / upcoming): PASSED")
+    
+    # 1. Test backend protection against wrong place progression
+    payload_wrong = {"place_name": "Taj Mahal Palace Hotel"}  # not current
+    res_wrong = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/itinerary/complete", json=payload_wrong, headers=headers_leader)
+    assert res_wrong.status_code == 400
+    print("Protection check against incorrect place name progression: PASSED")
+    
+    # 2. Complete current place ("Gateway of India")
+    payload_correct = {"place_name": "Gateway of India"}
+    res_complete = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/itinerary/complete", json=payload_correct, headers=headers_leader)
+    assert res_complete.status_code == 200
+    print("Complete current place ('Gateway of India') progression: PASSED")
+    
+    # 3. Test protection against duplicate progression (sending Gateway of India again)
+    res_dup = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/itinerary/complete", json=payload_correct, headers=headers_leader)
+    assert res_dup.status_code == 400
+    print("Protection check against duplicate progression requests: PASSED")
+    
+    # Verify progression status
+    res = requests.get(f"{BASE_URL}/itineraries/{itinerary_id}", headers=headers_leader)
+    plans = res.json()["daily_plans"]
+    act1 = plans[0]["activities"][0]
+    act2 = plans[0]["activities"][1]
+    assert act1["status"] == "completed"
+    assert act2["status"] == "current"
+    
+    # 4. Verify system chat message details (including leader crown emoji & username)
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=headers_leader)
+    chat_history = res_chat.json()
+    system_msgs = [m for m in chat_history if m["message_type"] == "system"]
+    assert len(system_msgs) > 0
+    last_msg = system_msgs[-1]["message"]
+    print("System chat message logged:", last_msg)
+    assert "👑 test_leader completed Gateway of India. Moving to Taj Mahal Palace Hotel." in last_msg
+    print("System chat message format and content validation: PASSED")
+    
+    # 5. Skip the next destination to test skip mechanics and end-of-trip handling
+    payload_skip = {"place_name": "Taj Mahal Palace Hotel"}
+    res_skip = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/itinerary/skip", json=payload_skip, headers=headers_leader)
+    assert res_skip.status_code == 200
+    print("Skip current place ('Taj Mahal Palace Hotel') progression: PASSED")
+    
+    # Verify end of trip state: no current activity, all completed/skipped
+    res = requests.get(f"{BASE_URL}/itineraries/{itinerary_id}", headers=headers_leader)
+    plans = res.json()["daily_plans"]
+    act2 = plans[0]["activities"][1]
+    assert act2["status"] == "skipped"
+    
+    all_statuses = [act["status"] for day in plans for act in day["activities"]]
+    assert "current" not in all_statuses
+    print("End-of-trip status verify (no next/current destination left): PASSED")
+    
+    # Verify end-of-trip system chat message
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=headers_leader)
+    chat_history = res_chat.json()
+    system_msgs = [m for m in chat_history if m["message_type"] == "system"]
+    last_msg = system_msgs[-1]["message"]
+    print("End-of-trip system message logged:", last_msg)
+    assert "👑 test_leader skipped Taj Mahal Palace Hotel. Trip completed!" in last_msg
+    print("End-of-trip system message validation: PASSED")
+
 def clean_database(itinerary_id, leader_id, buddy_id):
     print("\n--- Cleaning up test records ---")
     conn = get_db_connection()
@@ -245,6 +322,7 @@ def main():
         
         test_live_location_alarms(leader_token, itinerary_id)
         test_expenses_and_splitting(leader_token, buddy_token, itinerary_id)
+        test_itinerary_progression(leader_token, buddy_token, itinerary_id)
         
         clean_database(itinerary_id, leader_id, buddy_id)
         print("\n=== ALL TESTS COMPLETED SUCCESSFULLY! ===")

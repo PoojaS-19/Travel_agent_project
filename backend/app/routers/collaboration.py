@@ -36,6 +36,7 @@ from app.models.collaboration_schemas import (
     MemberLocationResponse,
     ChatMessageCreate,
     ChatMessageResponse,
+    ProgressionRequest,
 )
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.routers.auth import get_current_user_id
@@ -43,6 +44,8 @@ from app.services.auth_service import AuthService
 from app.services.collaboration_service import CollaborationService
 from app.websocket_manager import trip_ws_manager
 from app.models.collaboration import TripNotification, CollaboratorRole, TripChatMessage
+from app.models import Itinerary
+from app.services.database_service import normalize_daily_plans
 
 
 
@@ -571,4 +574,236 @@ async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str
             await trip_ws_manager.broadcast(trip_id, "presence", {"status": "offline"})
     finally:
         db.close()
+
+
+@router.post("/trips/{trip_id}/itinerary/complete")
+async def mark_destination_completed(
+    trip_id: int,
+    payload: ProgressionRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    # Require collaborator membership & edit rights
+    service = CollaborationService(db)
+    collaborator = service.require_member(trip_id, user_id)
+    if collaborator.role not in [CollaboratorRole.OWNER, CollaboratorRole.EDITOR]:
+        raise HTTPException(status_code=403, detail="Only owners or editors can update destination status.")
+
+    # Fetch itinerary
+    itinerary = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not itinerary:
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+
+    daily_plans = itinerary.daily_plans
+    if not isinstance(daily_plans, list) or len(daily_plans) == 0:
+        raise HTTPException(status_code=400, detail="Itinerary daily plans are empty")
+
+    # Normalize if not already done
+    daily_plans = normalize_daily_plans(daily_plans)
+
+    # Flatten activities to find current
+    all_activities = []
+    for day in daily_plans:
+        if isinstance(day, dict) and "activities" in day:
+            activities = day["activities"]
+            if isinstance(activities, list):
+                for act in activities:
+                    if isinstance(act, dict):
+                        all_activities.append(act)
+
+    if len(all_activities) == 0:
+        raise HTTPException(status_code=400, detail="No activities found in itinerary")
+
+    # Find current activity
+    cur_idx = -1
+    for i, act in enumerate(all_activities):
+        if act.get("status") == "current":
+            cur_idx = i
+            break
+
+    if cur_idx == -1:
+        raise HTTPException(status_code=400, detail="No active current destination exists for this trip.")
+
+    current_act = all_activities[cur_idx]
+    place_name = current_act.get("place_name", "Unknown Location")
+
+    # Duplicate Protection check
+    if place_name != payload.place_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Progression mismatch: '{payload.place_name}' is not the current active destination."
+        )
+
+    # Mark it as completed
+    current_act["status"] = "completed"
+
+    # Find the next upcoming activity to make current
+    next_act = None
+    for i in range(cur_idx + 1, len(all_activities)):
+        if all_activities[i].get("status") == "upcoming":
+            next_act = all_activities[i]
+            break
+
+    role_prefix = "👑 " if collaborator.role == CollaboratorRole.OWNER else ""
+    actor_name = f"{role_prefix}{collaborator.user.username if collaborator.user else 'Unknown'}"
+
+    if next_act:
+        next_act["status"] = "current"
+        next_place_name = next_act.get("place_name", "Unknown Location")
+        system_message = f"{actor_name} completed {place_name}. Moving to {next_place_name}."
+    else:
+        system_message = f"{actor_name} completed {place_name}. Trip completed!"
+
+    # Save to DB
+    from sqlalchemy.orm.attributes import flag_modified
+    itinerary.daily_plans = daily_plans
+    flag_modified(itinerary, "daily_plans")
+    db.add(itinerary)
+
+    # Create system chat message
+    db_msg = TripChatMessage(
+        trip_id=trip_id,
+        user_id=user_id,
+        message=system_message,
+        message_type="system",
+        created_at=datetime.utcnow()
+    )
+    db.add(db_msg)
+    db.commit()
+    db.refresh(db_msg)
+
+    # Broadcast system chat message via WebSocket
+    ws_payload = {
+        "id": db_msg.id,
+        "trip_id": trip_id,
+        "user_id": user_id,
+        "username": "System",
+        "message": db_msg.message,
+        "message_type": db_msg.message_type,
+        "message_uuid": db_msg.message_uuid,
+        "is_pinned": db_msg.is_pinned,
+        "timestamp": db_msg.created_at.isoformat() + "Z"
+    }
+    await trip_ws_manager.broadcast(trip_id, "chat_message", ws_payload)
+
+    # Broadcast progress update to reload itinerary UI
+    await trip_ws_manager.broadcast(trip_id, "itinerary_progress_updated", {})
+
+    return {"message": "Destination completed successfully", "daily_plans": daily_plans}
+
+
+@router.post("/trips/{trip_id}/itinerary/skip")
+async def skip_destination(
+    trip_id: int,
+    payload: ProgressionRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    # Require collaborator membership & edit rights
+    service = CollaborationService(db)
+    collaborator = service.require_member(trip_id, user_id)
+    if collaborator.role not in [CollaboratorRole.OWNER, CollaboratorRole.EDITOR]:
+        raise HTTPException(status_code=403, detail="Only owners or editors can update destination status.")
+
+    # Fetch itinerary
+    itinerary = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not itinerary:
+        raise HTTPException(status_code=404, detail="Itinerary not found")
+
+    daily_plans = itinerary.daily_plans
+    if not isinstance(daily_plans, list) or len(daily_plans) == 0:
+        raise HTTPException(status_code=400, detail="Itinerary daily plans are empty")
+
+    # Normalize if not already done
+    daily_plans = normalize_daily_plans(daily_plans)
+
+    # Flatten activities to find current
+    all_activities = []
+    for day in daily_plans:
+        if isinstance(day, dict) and "activities" in day:
+            activities = day["activities"]
+            if isinstance(activities, list):
+                for act in activities:
+                    if isinstance(act, dict):
+                        all_activities.append(act)
+
+    if len(all_activities) == 0:
+        raise HTTPException(status_code=400, detail="No activities found in itinerary")
+
+    # Find current activity
+    cur_idx = -1
+    for i, act in enumerate(all_activities):
+        if act.get("status") == "current":
+            cur_idx = i
+            break
+
+    if cur_idx == -1:
+        raise HTTPException(status_code=400, detail="No active current destination exists for this trip.")
+
+    current_act = all_activities[cur_idx]
+    place_name = current_act.get("place_name", "Unknown Location")
+
+    # Duplicate Protection check
+    if place_name != payload.place_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Progression mismatch: '{payload.place_name}' is not the current active destination."
+        )
+
+    # Mark it as skipped
+    current_act["status"] = "skipped"
+
+    # Find the next upcoming activity to make current
+    next_act = None
+    for i in range(cur_idx + 1, len(all_activities)):
+        if all_activities[i].get("status") == "upcoming":
+            next_act = all_activities[i]
+            break
+
+    role_prefix = "👑 " if collaborator.role == CollaboratorRole.OWNER else ""
+    actor_name = f"{role_prefix}{collaborator.user.username if collaborator.user else 'Unknown'}"
+
+    if next_act:
+        next_act["status"] = "current"
+        next_place_name = next_act.get("place_name", "Unknown Location")
+        system_message = f"{actor_name} skipped {place_name}. Moving to {next_place_name}."
+    else:
+        system_message = f"{actor_name} skipped {place_name}. Trip completed!"
+
+    # Save to DB
+    from sqlalchemy.orm.attributes import flag_modified
+    itinerary.daily_plans = daily_plans
+    flag_modified(itinerary, "daily_plans")
+    db.add(itinerary)
+
+    # Create system chat message
+    db_msg = TripChatMessage(
+        trip_id=trip_id,
+        user_id=user_id,
+        message=system_message,
+        message_type="system",
+        created_at=datetime.utcnow()
+    )
+    db.add(db_msg)
+    db.commit()
+    db.refresh(db_msg)
+
+    # Broadcast system chat message via WebSocket
+    ws_payload = {
+        "id": db_msg.id,
+        "trip_id": trip_id,
+        "user_id": user_id,
+        "username": "System",
+        "message": db_msg.message,
+        "message_type": db_msg.message_type,
+        "message_uuid": db_msg.message_uuid,
+        "is_pinned": db_msg.is_pinned,
+        "timestamp": db_msg.created_at.isoformat() + "Z"
+    }
+    await trip_ws_manager.broadcast(trip_id, "chat_message", ws_payload)
+
+    # Broadcast progress update to reload itinerary UI
+    await trip_ws_manager.broadcast(trip_id, "itinerary_progress_updated", {})
+
+    return {"message": "Destination skipped successfully", "daily_plans": daily_plans}
 

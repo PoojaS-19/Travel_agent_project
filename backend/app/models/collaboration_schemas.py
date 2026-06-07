@@ -286,3 +286,7 @@ class ChatMessageResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ProgressionRequest(BaseModel):
+    place_name: str
+

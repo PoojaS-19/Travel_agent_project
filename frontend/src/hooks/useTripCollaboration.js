@@ -171,6 +171,10 @@ export default function useTripCollaboration(tripId) {
         });
       } else if (["suggestion_added", "vote_updated", "reaction_updated", "comment_added", "member_joined", "trip_updated", "trip_finalized"].includes(message.event)) {
         loadAll();
+      } else if (message.event === "itinerary_progress_updated") {
+        api.get(`/itineraries/${tripId}`)
+          .then((res) => setItinerary(res.data))
+          .catch((err) => console.error("Failed to load itinerary on progress update event:", err));
       }
     };
 
@@ -384,6 +388,28 @@ export default function useTripCollaboration(tripId) {
       addExpense, 
       sendChatMessage,
       sendTypingStatus,
+      completeDestination: async (place_name) => {
+        if (!tripId) return;
+        const res = await api.post(`/api/trips/${tripId}/itinerary/complete`, { place_name });
+        try {
+          const itRes = await api.get(`/itineraries/${tripId}`);
+          setItinerary(itRes.data);
+        } catch (err) {
+          console.error("Failed to load itinerary after complete:", err);
+        }
+        return res.data;
+      },
+      skipDestination: async (place_name) => {
+        if (!tripId) return;
+        const res = await api.post(`/api/trips/${tripId}/itinerary/skip`, { place_name });
+        try {
+          const itRes = await api.get(`/itineraries/${tripId}`);
+          setItinerary(itRes.data);
+        } catch (err) {
+          console.error("Failed to load itinerary after skip:", err);
+        }
+        return res.data;
+      },
       reload: loadAll 
     },
   };
