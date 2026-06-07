@@ -211,6 +211,28 @@ class LeaderLocationResponse(BaseModel):
         from_attributes = True
 
 
+class MemberLocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class MemberLocationResponse(BaseModel):
+    trip_id: int
+    user_id: int
+    username: Optional[str] = None
+    role: str
+    latitude: float
+    longitude: float
+    is_sharing: bool
+    last_updated: datetime
+    status: str
+    distance_from_leader: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+
 class TripExpenseCreate(BaseModel):
     place_name: str = Field(..., min_length=1, max_length=200)
     amount: Decimal = Field(..., ge=0)
@@ -242,3 +264,25 @@ class ExpenseSplitResult(BaseModel):
     share_per_person: Decimal
     expenses: List[TripExpenseResponse]
     splits: List[DebtSettlement]
+
+
+class ChatMessageCreate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+    message_type: Optional[str] = Field("text", pattern="^(text|system|announcement)$")
+    message_uuid: Optional[str] = Field(None, max_length=36)
+
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    message: str
+    message_type: str
+    message_uuid: Optional[str] = None
+    is_pinned: bool = False
+    message_metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+

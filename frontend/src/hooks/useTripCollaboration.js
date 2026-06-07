@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import api, { API_BASE_URL } from "../api";
 
 export default function useTripCollaboration(tripId) {
@@ -9,8 +9,14 @@ export default function useTripCollaboration(tripId) {
   const [error, setError] = useState("");
   const [expensesData, setExpensesData] = useState({ total_spent: 0, share_per_person: 0, expenses: [], splits: [] });
   const [leaderLocation, setLeaderLocation] = useState(null);
+  const [memberLocations, setMemberLocations] = useState([]);
   const [expensePromptPlace, setExpensePromptPlace] = useState(null);
   const [itinerary, setItinerary] = useState(null);
+
+  // Chat features states
+  const [chatMessages, setChatMessages] = useState([]);
+  const [typingUsers, setTypingUsers] = useState({});
+  const socketRef = useRef(null);
 
   const loadExpenses = useCallback(async () => {
     if (!tripId) return;
@@ -34,6 +40,26 @@ export default function useTripCollaboration(tripId) {
     }
   }, [tripId]);
 
+  const loadMemberLocations = useCallback(async () => {
+    if (!tripId) return;
+    try {
+      const res = await api.get(`/api/trips/${tripId}/locations`);
+      setMemberLocations(res.data);
+    } catch (err) {
+      console.error("Failed to load member locations:", err);
+    }
+  }, [tripId]);
+
+  const loadChatHistory = useCallback(async () => {
+    if (!tripId) return;
+    try {
+      const res = await api.get(`/api/trips/${tripId}/chat`);
+      setChatMessages(res.data);
+    } catch (err) {
+      console.error("Failed to load chat history:", err);
+    }
+  }, [tripId]);
+
   const loadAll = useCallback(async () => {
     if (!tripId) {
       setError("Invalid trip selected");
@@ -52,7 +78,7 @@ export default function useTripCollaboration(tripId) {
       setSuggestions(suggestionsRes.data.items || []);
       setDecisions(decisionsRes.data);
       if (itineraryRes) setItinerary(itineraryRes.data);
-      await Promise.all([loadExpenses(), loadLeaderLocation()]);
+      await Promise.all([loadExpenses(), loadLeaderLocation(), loadMemberLocations(), loadChatHistory()]);
     } catch (err) {
       const status = err.response?.status;
       if (status === 404) {
@@ -65,31 +91,94 @@ export default function useTripCollaboration(tripId) {
     } finally {
       setLoading(false);
     }
-  }, [tripId, loadExpenses, loadLeaderLocation]);
+  }, [tripId, loadExpenses, loadLeaderLocation, loadMemberLocations, loadChatHistory]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Clean up typing status automatically after 4 seconds of inactivity
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const cutoff = Date.now() - 4000;
+      setTypingUsers((prev) => {
+        let changed = false;
+        const next = {};
+        for (const [uid, info] of Object.entries(prev)) {
+          if (info.timestamp > cutoff) {
+            next[uid] = info;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!tripId || !token) return undefined;
     const wsBase = API_BASE_URL.replace("http://", "ws://").replace("https://", "wss://");
     const socket = new WebSocket(`${wsBase}/ws/trips/${tripId}?token=${encodeURIComponent(token)}`);
+    socketRef.current = socket;
+
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data);
+      const payload = message.payload || message;
       if (message.event === "leader_location_updated") {
-        setLeaderLocation({ lat: message.lat, lon: message.lon });
+        setLeaderLocation({ lat: payload.lat, lon: payload.lon });
+        loadMemberLocations();
+      } else if (message.event === "member_locations_updated") {
+        setMemberLocations(payload.locations || []);
       } else if (message.event === "expense_updated") {
         loadExpenses();
       } else if (message.event === "ask_expense") {
-        setExpensePromptPlace(message.place_name);
+        setExpensePromptPlace(payload.place_name);
+      } else if (message.event === "presence") {
+        loadMemberLocations();
+      } else if (message.event === "chat_message") {
+        setChatMessages((prev) => {
+          // De-duplicate messages using both DB id and client message_uuid
+          if (prev.some((m) => m.id === payload.id || (payload.message_uuid && m.message_uuid === payload.message_uuid))) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: payload.id,
+              user_id: payload.user_id,
+              username: payload.username,
+              message: payload.message,
+              message_type: payload.message_type,
+              message_uuid: payload.message_uuid,
+              is_pinned: payload.is_pinned,
+              created_at: payload.timestamp,
+            },
+          ];
+        });
+      } else if (message.event === "chat_typing") {
+        const { user_id, username, is_typing } = payload;
+        setTypingUsers((prev) => {
+          const next = { ...prev };
+          if (is_typing) {
+            next[user_id] = { username, timestamp: Date.now() };
+          } else {
+            delete next[user_id];
+          }
+          return next;
+        });
       } else if (["suggestion_added", "vote_updated", "reaction_updated", "comment_added", "member_joined", "trip_updated", "trip_finalized"].includes(message.event)) {
         loadAll();
       }
     };
-    return () => socket.close();
-  }, [tripId, loadAll, loadExpenses]);
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [tripId, loadAll, loadExpenses, loadMemberLocations]);
 
   const inviteMembers = async (emails, role) => {
     if (!tripId) throw new Error("Invalid trip selected");
@@ -170,10 +259,90 @@ export default function useTripCollaboration(tripId) {
     await api.post(`/api/trips/${tripId}/leader-location`, { lat, lon });
   };
 
+  const updateMemberLocation = async (lat, lon) => {
+    if (!tripId) return;
+    const response = await api.post(`/api/trips/${tripId}/locations`, { latitude: lat, longitude: lon });
+    return response.data;
+  };
+
+  const toggleSharingStatus = async (isSharing) => {
+    if (!tripId) return;
+    const response = await api.patch(`/api/trips/${tripId}/collaboration/members/me/sharing`, null, {
+      params: { is_sharing: isSharing }
+    });
+    return response.data;
+  };
+
   const addExpense = async (place_name, amount, description = "") => {
     if (!tripId) return;
     await api.post(`/api/trips/${tripId}/expenses`, { place_name, amount, description });
   };
+
+  const sendChatMessage = async (messageText, messageType = "text") => {
+    if (!tripId) throw new Error("Invalid trip selected");
+    
+    // Generate UUID
+    const uuid = typeof crypto !== "undefined" && crypto.randomUUID 
+      ? crypto.randomUUID() 
+      : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    // Parse current user from local storage
+    let currentUserId = 0;
+    let currentUsername = "Me";
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        const parsed = JSON.parse(userStr);
+        currentUserId = parsed.id || 0;
+        currentUsername = parsed.username || "Me";
+      }
+    } catch (err) {
+      console.error("Error parsing user from localStorage:", err);
+    }
+    
+    const optimisticMsg = {
+      id: `opt-${uuid}`,
+      user_id: currentUserId,
+      username: currentUsername,
+      message: messageText,
+      message_type: messageType,
+      message_uuid: uuid,
+      is_pinned: false,
+      created_at: new Date().toISOString(),
+    };
+    
+    // Optimistic append
+    setChatMessages((prev) => [...prev, optimisticMsg]);
+    
+    try {
+      const res = await api.post(`/api/trips/${tripId}/chat`, {
+        message: messageText,
+        message_type: messageType,
+        message_uuid: uuid,
+      });
+      
+      // Update with server details
+      setChatMessages((prev) =>
+        prev.map((m) => (m.message_uuid === uuid ? res.data : m))
+      );
+      return res.data;
+    } catch (err) {
+      // Rollback optimistic update
+      setChatMessages((prev) => prev.filter((m) => m.message_uuid !== uuid));
+      throw err;
+    }
+  };
+
+  const sendTypingStatus = useCallback((isTyping) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(
+        JSON.stringify({
+          event: "chat_typing",
+          payload: { is_typing: isTyping }
+        })
+      );
+    }
+  }, []);
 
   const groupedSuggestions = useMemo(
     () =>
@@ -192,11 +361,30 @@ export default function useTripCollaboration(tripId) {
     decisions,
     expensesData,
     leaderLocation,
+    memberLocations,
     expensePromptPlace,
     setExpensePromptPlace,
     itinerary,
     loading,
     error,
-    actions: { inviteMembers, addSuggestion, vote, rank, react, comment, setVotingLocked, finalize, updateLeaderLocation, addExpense, reload: loadAll },
+    chatMessages,
+    typingUsers,
+    actions: { 
+      inviteMembers, 
+      addSuggestion, 
+      vote, 
+      rank, 
+      react, 
+      comment, 
+      setVotingLocked, 
+      finalize, 
+      updateLeaderLocation, 
+      updateMemberLocation,
+      toggleSharingStatus,
+      addExpense, 
+      sendChatMessage,
+      sendTypingStatus,
+      reload: loadAll 
+    },
   };
 }

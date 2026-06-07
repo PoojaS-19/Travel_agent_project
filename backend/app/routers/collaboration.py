@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from jose import JWTError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import SessionLocal, get_db
 from app.models.collaboration_schemas import (
@@ -32,13 +32,18 @@ from app.models.collaboration_schemas import (
     TripExpenseCreate,
     TripExpenseResponse,
     ExpenseSplitResult,
+    MemberLocationUpdate,
+    MemberLocationResponse,
+    ChatMessageCreate,
+    ChatMessageResponse,
 )
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.routers.auth import get_current_user_id
 from app.services.auth_service import AuthService
 from app.services.collaboration_service import CollaborationService
 from app.websocket_manager import trip_ws_manager
-from app.models.collaboration import TripNotification
+from app.models.collaboration import TripNotification, CollaboratorRole, TripChatMessage
+
 
 
 router = APIRouter(prefix="/api", tags=["Trip Collaboration"])
@@ -309,6 +314,74 @@ def get_leader_location(trip_id: int, db: Session = Depends(get_db), user_id: in
     )
 
 
+@router.post("/trips/{trip_id}/locations", response_model=MemberLocationResponse)
+async def update_member_location(
+    trip_id: int,
+    payload: MemberLocationUpdate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    service = CollaborationService(db)
+    service.require_member(trip_id, user_id)
+    
+    collaborator = service.repo.get_collaborator(trip_id, user_id)
+    if collaborator and collaborator.role == CollaboratorRole.OWNER:
+        leader_loc, events_triggered = service.update_leader_location(trip_id, user_id, payload.latitude, payload.longitude)
+        
+        await trip_ws_manager.broadcast(trip_id, "leader_location_updated", {
+            "trip_id": trip_id,
+            "lat": payload.latitude,
+            "lon": payload.longitude,
+            "updated_at": leader_loc.updated_at.isoformat()
+        })
+        
+        for event in events_triggered:
+            await trip_ws_manager.broadcast(trip_id, event["event"], event)
+    else:
+        service.update_member_location(trip_id, user_id, payload.latitude, payload.longitude)
+        
+    all_locations = service.get_member_locations(trip_id)
+    await trip_ws_manager.broadcast(trip_id, "member_locations_updated", {
+        "trip_id": trip_id,
+        "locations": all_locations
+    })
+    
+    user_loc = next((l for l in all_locations if l["user_id"] == user_id), None)
+    if not user_loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return user_loc
+
+
+@router.get("/trips/{trip_id}/locations", response_model=list[MemberLocationResponse])
+def get_member_locations(trip_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    service.require_member(trip_id, user_id)
+    return service.get_member_locations(trip_id)
+
+
+@router.patch("/trips/{trip_id}/collaboration/members/me/sharing", response_model=MemberLocationResponse)
+async def update_sharing_status(
+    trip_id: int,
+    is_sharing: bool = Query(...),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    service = CollaborationService(db)
+    service.toggle_sharing_status(trip_id, user_id, is_sharing)
+    
+    all_locations = service.get_member_locations(trip_id)
+    await trip_ws_manager.broadcast(trip_id, "member_locations_updated", {
+        "trip_id": trip_id,
+        "locations": all_locations
+    })
+    
+    user_loc = next((l for l in all_locations if l["user_id"] == user_id), None)
+    if not user_loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return user_loc
+
+
+
 @router.post("/trips/{trip_id}/expenses", response_model=TripExpenseResponse)
 async def log_expense(trip_id: int, payload: TripExpenseCreate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     service = CollaborationService(db)
@@ -336,8 +409,129 @@ def get_expense_splits(trip_id: int, db: Session = Depends(get_db), user_id: int
     return splits
 
 
+@router.get("/trips/{trip_id}/chat", response_model=list[ChatMessageResponse])
+def get_chat_history(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    service = CollaborationService(db)
+    service.require_member(trip_id, user_id)
+    messages = (
+        db.query(TripChatMessage)
+        .options(joinedload(TripChatMessage.user))
+        .filter(TripChatMessage.trip_id == trip_id)
+        .order_by(TripChatMessage.created_at.asc())
+        .all()
+    )
+    result = []
+    for msg in messages:
+        result.append(
+            ChatMessageResponse(
+                id=msg.id,
+                user_id=msg.user_id,
+                username=msg.user.username if msg.user else "Unknown",
+                message=msg.message,
+                message_type=msg.message_type,
+                message_uuid=msg.message_uuid,
+                is_pinned=msg.is_pinned,
+                message_metadata=msg.message_metadata,
+                created_at=msg.created_at,
+            )
+        )
+    return result
+
+
+@router.post("/trips/{trip_id}/chat", response_model=ChatMessageResponse)
+async def send_chat_message(
+    trip_id: int,
+    payload: ChatMessageCreate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    service = CollaborationService(db)
+    collaborator = service.require_member(trip_id, user_id)
+    
+    # Validate message types: owner can post announcements, others get rejected
+    if payload.message_type == "announcement":
+        if collaborator.role != CollaboratorRole.OWNER:
+            raise HTTPException(
+                status_code=403,
+                detail="Only the trip leader can send announcements."
+            )
+            
+    # De-duplicate messages using client-generated message_uuid
+    if payload.message_uuid:
+        existing = (
+            db.query(TripChatMessage)
+            .options(joinedload(TripChatMessage.user))
+            .filter(TripChatMessage.message_uuid == payload.message_uuid)
+            .first()
+        )
+        if existing:
+            return ChatMessageResponse(
+                id=existing.id,
+                user_id=existing.user_id,
+                username=existing.user.username if existing.user else "Unknown",
+                message=existing.message,
+                message_type=existing.message_type,
+                message_uuid=existing.message_uuid,
+                is_pinned=existing.is_pinned,
+                message_metadata=existing.message_metadata,
+                created_at=existing.created_at,
+            )
+            
+    db_msg = TripChatMessage(
+        trip_id=trip_id,
+        user_id=user_id,
+        message=payload.message,
+        message_type=payload.message_type or "text",
+        message_uuid=payload.message_uuid,
+        created_at=datetime.utcnow()
+    )
+    db.add(db_msg)
+    db.commit()
+    db.refresh(db_msg)
+    
+    # Eager load user relationship
+    db_msg = (
+        db.query(TripChatMessage)
+        .options(joinedload(TripChatMessage.user))
+        .filter(TripChatMessage.id == db_msg.id)
+        .first()
+    )
+    
+    response = ChatMessageResponse(
+        id=db_msg.id,
+        user_id=db_msg.user_id,
+        username=db_msg.user.username if db_msg.user else "Unknown",
+        message=db_msg.message,
+        message_type=db_msg.message_type,
+        message_uuid=db_msg.message_uuid,
+        is_pinned=db_msg.is_pinned,
+        message_metadata=db_msg.message_metadata,
+        created_at=db_msg.created_at,
+    )
+    
+    ws_payload = {
+        "id": db_msg.id,
+        "trip_id": trip_id,
+        "user_id": user_id,
+        "username": response.username,
+        "message": db_msg.message,
+        "message_type": db_msg.message_type,
+        "message_uuid": db_msg.message_uuid,
+        "is_pinned": db_msg.is_pinned,
+        "timestamp": db_msg.created_at.isoformat() + "Z"
+    }
+    await trip_ws_manager.broadcast(trip_id, "chat_message", ws_payload)
+    
+    return response
+
+
 async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str = Query(...)):
     db = SessionLocal()
+    user_id = None
     try:
         try:
             payload = AuthService.decode_token(token)
@@ -346,12 +540,35 @@ async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str
             await websocket.close(code=1008)
             return
         CollaborationService(db).require_member(trip_id, user_id)
+        
+        # Get username for typing broadcasts
+        from app.models.models import User
+        user = db.query(User).filter_by(id=user_id).first()
+        username = user.username if user else "Unknown"
+
         await trip_ws_manager.connect(trip_id, websocket)
         await trip_ws_manager.broadcast(trip_id, "presence", {"user_id": user_id, "status": "online"})
         while True:
-            await websocket.receive_text()
+            text_data = await websocket.receive_text()
+            try:
+                import json
+                data = json.loads(text_data)
+                if data.get("event") == "chat_typing":
+                    is_typing = data.get("payload", {}).get("is_typing", True)
+                    await trip_ws_manager.broadcast(trip_id, "chat_typing", {
+                        "trip_id": trip_id,
+                        "user_id": user_id,
+                        "username": username,
+                        "is_typing": is_typing
+                    })
+            except Exception:
+                pass
     except WebSocketDisconnect:
         trip_ws_manager.disconnect(trip_id, websocket)
-        await trip_ws_manager.broadcast(trip_id, "presence", {"status": "offline"})
+        if user_id is not None:
+            await trip_ws_manager.broadcast(trip_id, "presence", {"user_id": user_id, "status": "offline"})
+        else:
+            await trip_ws_manager.broadcast(trip_id, "presence", {"status": "offline"})
     finally:
         db.close()
+

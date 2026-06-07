@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -29,6 +29,67 @@ const leaderIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+const MEMBER_COLORS = ["green", "gold", "violet", "orange", "grey", "black"];
+const memberIcons = MEMBER_COLORS.reduce((acc, color) => {
+  acc[color] = new L.Icon({
+    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+  return acc;
+}, {});
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return null;
+  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatLastUpdated(dateStr, isOffline = false) {
+  if (!dateStr) return "Never";
+  const diffMs = Math.max(0, new Date() - new Date(dateStr));
+  const diffSecs = Math.floor(diffMs / 1000);
+  if (diffSecs < 10) {
+    return isOffline ? "Last seen just now" : "Updated just now";
+  }
+  if (diffSecs < 60) {
+    return isOffline ? `Last seen ${diffSecs} seconds ago` : `Updated ${diffSecs} seconds ago`;
+  }
+  const diffMins = Math.floor(diffSecs / 60);
+  if (diffMins < 5) {
+    return isOffline ? `Last seen ${diffMins} min ago` : `Updated ${diffMins} minutes ago`;
+  }
+  if (diffMins < 10) {
+    return isOffline ? `Last seen ${diffMins} min ago (Location may be outdated)` : "Location may be outdated";
+  }
+  return "Location expired";
+}
+
+function MapZoomListener({ onChangeZoom }) {
+  const map = useMap();
+  useEffect(() => {
+    const onZoom = () => onChangeZoom(map.getZoom());
+    map.on("zoomend", onZoom);
+    return () => {
+      map.off("zoomend", onZoom);
+    };
+  }, [map, onChangeZoom]);
+  return null;
+}
+
 // Helper component to dynamically fly/recenter the Leaflet map
 function ChangeMapView({ center }) {
   const map = useMap();
@@ -50,13 +111,115 @@ export default function CollaborationDashboard() {
     decisions,
     expensesData,
     leaderLocation,
+    memberLocations,
     expensePromptPlace,
     setExpensePromptPlace,
     itinerary,
     loading,
     error,
+    chatMessages,
+    typingUsers,
     actions
   } = useTripCollaboration(tripId);
+
+  // Chat UI states & logic
+  const [chatCollapsed, setChatCollapsed] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [messageInput, setMessageInput] = useState("");
+  const [msgType, setMsgType] = useState("text"); // "text" or "announcement"
+
+  const typingTimeoutRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const prevMessagesLength = useRef(0);
+
+  // Auto-scroll to bottom of chat when messages change or it is expanded
+  useEffect(() => {
+    if (!chatCollapsed && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, chatCollapsed]);
+
+  // Unread messages counter logic
+  useEffect(() => {
+    if (chatMessages && chatMessages.length > prevMessagesLength.current) {
+      if (chatCollapsed) {
+        const lastMsg = chatMessages[chatMessages.length - 1];
+        let currentUserId = null;
+        try {
+          const userStr = localStorage.getItem("user");
+          if (userStr) {
+            currentUserId = JSON.parse(userStr).id;
+          }
+        } catch (err) {
+          console.error(err);
+        }
+        // Increment only for other users' messages
+        if (lastMsg && lastMsg.user_id !== currentUserId && !lastMsg.id.toString().startsWith("opt-")) {
+          setUnreadCount((prev) => prev + 1);
+        }
+      }
+    }
+    prevMessagesLength.current = chatMessages ? chatMessages.length : 0;
+  }, [chatMessages, chatCollapsed]);
+
+  useEffect(() => {
+    if (!chatCollapsed) {
+      setUnreadCount(0);
+    }
+  }, [chatCollapsed]);
+
+  const handleInputChange = (e) => {
+    setMessageInput(e.target.value);
+    if (actions.sendTypingStatus) {
+      actions.sendTypingStatus(true);
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      if (actions.sendTypingStatus) {
+        actions.sendTypingStatus(false);
+      }
+    }, 2000);
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!messageInput.trim()) return;
+    const textToSend = messageInput.trim();
+    setMessageInput("");
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (actions.sendTypingStatus) {
+      actions.sendTypingStatus(false);
+    }
+    try {
+      await actions.sendChatMessage(textToSend, msgType);
+      setMsgType("text");
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to send message.");
+    }
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return "";
+    try {
+      const d = new Date(timeStr);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch (err) {
+      return "";
+    }
+  };
+
+  const getTypingText = () => {
+    const list = Object.values(typingUsers || {});
+    if (list.length === 0) return "";
+    if (list.length === 1) return `${list[0].username} is typing...`;
+    if (list.length === 2) return `${list[0].username} and ${list[1].username} are typing...`;
+    return "Multiple people are typing...";
+  };
 
   // Modal / Form States
   const [promptAmount, setPromptAmount] = useState("");
@@ -184,10 +347,251 @@ export default function CollaborationDashboard() {
 
   // Determine center of map: leader location or first itinerary activity
   const mapCenter = useMemo(() => {
-    if (leaderLocation) return [leaderLocation.lat, leaderLocation.lon];
+    if (leaderLocation && leaderLocation.lat && leaderLocation.lon) {
+      return [leaderLocation.lat, leaderLocation.lon];
+    }
     if (mapPlaces.length > 0) return [mapPlaces[0].lat, mapPlaces[0].lon];
     return [19.0760, 72.8777]; // Mumbai
   }, [leaderLocation, mapPlaces]);
+
+  const [locationError, setLocationError] = useState("");
+  const [isSharingLocal, setIsSharingLocal] = useState(true);
+  const [followLeader, setFollowLeader] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(13);
+  const [now, setNow] = useState(new Date());
+  const [selectedDestinationIndex, setSelectedDestinationIndex] = useState(0);
+  const [lastSent, setLastSent] = useState(null);
+
+  // Dynamic timing refresh
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Geolocation update with smart optimization threshold (> 30m or > 30s)
+  useEffect(() => {
+    if (!tripId || !actions.updateMemberLocation || !isSharingLocal) return;
+
+    let watchId = null;
+    const sendLocation = (lat, lon) => {
+      const currentTime = Date.now();
+      if (lastSent) {
+        const distKm = haversineDistance(lat, lon, lastSent.lat, lastSent.lon);
+        const timeDiffSec = (currentTime - lastSent.timestamp) / 1000;
+        if (distKm !== null && distKm < 0.03 && timeDiffSec < 30) {
+          return; // Skip DB write
+        }
+      }
+
+      if (isOwner) {
+        actions.updateLeaderLocation(lat, lon).catch(err => console.error(err));
+      } else {
+        actions.updateMemberLocation(lat, lon).catch(err => console.error(err));
+      }
+      setLastSent({ lat, lon, timestamp: currentTime });
+    };
+
+    const handleSuccess = (position) => {
+      setLocationError("");
+      sendLocation(position.coords.latitude, position.coords.longitude);
+    };
+
+    const handleError = (error) => {
+      console.warn("GPS error code:", error.code);
+      let errMsg = "📍 Location access not granted. Enable location sharing to appear on the map.";
+      if (error.code === error.TIMEOUT) {
+        errMsg = "📍 GPS signal request timed out. Retrying...";
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        errMsg = "📍 GPS signal unavailable.";
+      }
+      setLocationError(errMsg);
+    };
+
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    } else {
+      setLocationError("📍 Browser does not support geolocation.");
+    }
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [tripId, isOwner, isSharingLocal, lastSent, actions]);
+
+  const handleSharingToggle = async (e) => {
+    const checked = e.target.checked;
+    setIsSharingLocal(checked);
+    try {
+      await actions.toggleSharingStatus(checked);
+      if (!checked) {
+        setLastSent(null);
+      }
+    } catch (err) {
+      console.error("Failed to toggle sharing status:", err);
+    }
+  };
+
+  const handleRetryLocation = () => {
+    setLocationError("");
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocationError("");
+          if (isOwner) {
+            actions.updateLeaderLocation(position.coords.latitude, position.coords.longitude);
+          } else {
+            actions.updateMemberLocation(position.coords.latitude, position.coords.longitude);
+          }
+        },
+        (error) => {
+          console.warn("GPS retry error:", error);
+          setLocationError("📍 Location access not granted. Enable location sharing to appear on the map.");
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  };
+
+  // Process and color-code member locations
+  const activeLocations = useMemo(() => {
+    const list = dashboard?.members || [];
+    const nowTime = new Date();
+    return (memberLocations || [])
+      .filter(loc => {
+        if (!loc.is_sharing) return false;
+        
+        // Exclude members with expired locations (> 10 minutes)
+        const diffMs = nowTime - new Date(loc.last_updated);
+        if (diffMs > 600000) return false;
+        
+        return true;
+      })
+      .map((loc, idx) => {
+        const color = MEMBER_COLORS[idx % MEMBER_COLORS.length];
+        return {
+          ...loc,
+          color,
+          icon: loc.role === "owner" ? leaderIcon : memberIcons[color]
+        };
+      });
+  }, [memberLocations, dashboard, now]);
+
+  // Cluster calculations based on Zoom level
+  const clusteredLocations = useMemo(() => {
+    const threshold = 0.1 / Math.pow(2, zoomLevel - 8);
+    const clusters = [];
+    
+    activeLocations.forEach(member => {
+      let foundCluster = null;
+      for (const cluster of clusters) {
+        const distLat = Math.abs(cluster.centerLat - member.latitude);
+        const distLon = Math.abs(cluster.centerLon - member.longitude);
+        if (distLat < threshold && distLon < threshold) {
+          foundCluster = cluster;
+          break;
+        }
+      }
+      
+      if (foundCluster) {
+        foundCluster.members.push(member);
+        const count = foundCluster.members.length;
+        foundCluster.centerLat = (foundCluster.centerLat * (count - 1) + member.latitude) / count;
+        foundCluster.centerLon = (foundCluster.centerLon * (count - 1) + member.longitude) / count;
+      } else {
+        clusters.push({
+          centerLat: member.latitude,
+          centerLon: member.longitude,
+          members: [member]
+        });
+      }
+    });
+    return clusters;
+  }, [activeLocations, zoomLevel]);
+
+  // Destination Arrival Tracking
+  const currentDestination = mapPlaces[selectedDestinationIndex] || null;
+
+  const arrivalList = useMemo(() => {
+    if (!currentDestination) return [];
+    
+    const nowTime = new Date();
+    const members = dashboard?.members || [];
+    
+    return members.map(m => {
+      const loc = (memberLocations || []).find(l => l.user_id === m.user_id);
+      
+      let arrived = false;
+      let status = "Offline / No Location";
+      let isStale = true;
+      let sharing = false;
+      
+      if (loc) {
+        sharing = loc.is_sharing;
+        const diffMs = nowTime - new Date(loc.last_updated);
+        isStale = diffMs > 600000;
+        
+        if (loc.is_sharing && !isStale) {
+          const distKm = haversineDistance(loc.latitude, loc.longitude, currentDestination.lat, currentDestination.lon);
+          if (distKm !== null && distKm <= 0.1) {
+            arrived = true;
+          }
+          status = arrived ? "Arrived" : "Not Arrived";
+        } else if (!loc.is_sharing) {
+          status = "Sharing Disabled";
+        } else {
+          status = "Location Expired";
+        }
+      }
+      
+      return {
+        username: m.username || m.email,
+        role: m.role,
+        arrived,
+        status,
+        isStale,
+        isSharing: sharing
+      };
+    });
+  }, [memberLocations, currentDestination, dashboard, now]);
+  
+  const activeMembersForArrival = useMemo(() => {
+    return arrivalList.filter(m => !m.isStale && m.isSharing);
+  }, [arrivalList]);
+  
+  const arrivedCount = useMemo(() => {
+    return activeMembersForArrival.filter(m => m.arrived).length;
+  }, [activeMembersForArrival]);
+
+  const createClusterIcon = (count) => {
+    const html = `
+      <div style="
+          background: radial-gradient(circle, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 15px;
+          border: 3px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      ">
+          ${count}
+      </div>
+    `;
+    return L.divIcon({
+      html: html,
+      className: 'custom-cluster-marker',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+  };
 
   // Form Submissions
   const handlePromptExpenseSubmit = async (e) => {
@@ -223,7 +627,11 @@ export default function CollaborationDashboard() {
     const place = mapPlaces[selectedSimPlaceIndex];
     if (!place) return;
     try {
-      await actions.updateLeaderLocation(place.lat, place.lon);
+      if (isOwner) {
+        await actions.updateLeaderLocation(place.lat, place.lon);
+      } else {
+        await actions.updateMemberLocation(place.lat, place.lon);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -233,8 +641,12 @@ export default function CollaborationDashboard() {
     const place = mapPlaces[selectedSimPlaceIndex];
     if (!place) return;
     try {
-      // Teleport leader 1km away from coordinates to simulate leaving the location
-      await actions.updateLeaderLocation(place.lat + 0.01, place.lon + 0.01);
+      if (isOwner) {
+        // Teleport leader 1km away from coordinates to simulate leaving the location
+        await actions.updateLeaderLocation(place.lat + 0.01, place.lon + 0.01);
+      } else {
+        await actions.updateMemberLocation(place.lat + 0.01, place.lon + 0.01);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -318,17 +730,43 @@ export default function CollaborationDashboard() {
 
       {/* Members rail */}
       <section className="member-rail">
-        {(dashboard?.members || []).map((member) => (
-          <div className="member-chip" key={member.id}>
-            <span style={{ background: member.role === "owner" ? "#fee2e2" : "#dbeafe", color: member.role === "owner" ? "#b91c1c" : "#1e3a8a" }}>
-              {member.role === "owner" ? "👑" : member.username?.slice(0, 1).toUpperCase() || member.email?.slice(0, 1).toUpperCase()}
-            </span>
-            <div>
-              <strong>{member.username || member.email}</strong>
-              <small>{member.role === "owner" ? "Leader" : member.role === "follower" ? "Buddy (Follower)" : member.role}</small>
+        {(dashboard?.members || []).map((member) => {
+          const loc = (memberLocations || []).find(l => l.user_id === member.user_id);
+          const status = loc ? loc.status : "Offline";
+          const isOnline = status === "Online";
+          const isSharingDisabled = status === "Location Sharing Disabled";
+          
+          return (
+            <div className="member-chip" key={member.id}>
+              <span style={{ background: member.role === "owner" ? "#fee2e2" : "#dbeafe", color: member.role === "owner" ? "#b91c1c" : "#1e3a8a", position: "relative" }}>
+                {member.role === "owner" ? "👑" : member.username?.slice(0, 1).toUpperCase() || member.email?.slice(0, 1).toUpperCase()}
+                <span style={{
+                  position: "absolute",
+                  bottom: "-2px",
+                  right: "-2px",
+                  width: "10px",
+                  height: "10px",
+                  borderRadius: "50%",
+                  border: "2px solid white",
+                  background: isOnline ? "#22c55e" : isSharingDisabled ? "#dc2626" : "#94a3b8"
+                }}></span>
+              </span>
+              <div>
+                <strong>{member.username || member.email}</strong>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <small>{member.role === "owner" ? "Leader" : member.role === "follower" ? "Buddy (Follower)" : member.role}</small>
+                  <span style={{
+                    fontSize: "10px",
+                    fontWeight: "600",
+                    color: isOnline ? "#16a34a" : isSharingDisabled ? "#dc2626" : "#64748b"
+                  }}>
+                    • {status}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {(dashboard?.pending_invitations || []).map((invite) => (
           <div className="member-chip pending" key={invite.id}>
             <span>✉️</span>
@@ -467,46 +905,253 @@ export default function CollaborationDashboard() {
 
       {/* 2. Live Location Map & Leader Location Simulator */}
       <section className="map-container-wrapper">
-        <h3>📍 Leader Live Tracking Map</h3>
-        <p style={{ fontSize: "14px", color: "#64748b", margin: "-6px 0 14px 0" }}>
-          Red marker indicates the Leader's live location. Blue markers represent planned itinerary activities.
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "5px" }}>
+          <h3 style={{ margin: 0 }}>📍 Multi-Member Live Tracking Map</h3>
+          
+          <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: "600", color: "#1e293b", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={isSharingLocal}
+                onChange={handleSharingToggle}
+                style={{ width: "16px", height: "16px" }}
+              />
+              Share Live Location
+            </label>
+            
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: "600", color: "#1e293b", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={followLeader}
+                onChange={(e) => setFollowLeader(e.target.checked)}
+                style={{ width: "16px", height: "16px" }}
+              />
+              Follow Leader Mode
+            </label>
+          </div>
+        </div>
+
+        <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 14px 0" }}>
+          Red marker indicates the Leader's live location. Other colors represent members' live positions. Blue markers represent planned itinerary activities.
         </p>
 
-        <MapContainer center={mapCenter} zoom={13}>
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-          
-          <ChangeMapView center={mapCenter} />
+        {locationError && (
+          <div style={{
+            background: "#fee2e2",
+            border: "1px solid #fca5a5",
+            color: "#991b1b",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            marginBottom: "15px",
+            fontSize: "14px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center"
+          }}>
+            <span>{locationError}</span>
+            <button
+              onClick={handleRetryLocation}
+              style={{
+                background: "#dc2626",
+                color: "white",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: "600"
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
-          {/* Activities plan markers */}
-          {mapPlaces.map((place, idx) => (
-            <Marker key={idx} position={[place.lat, place.lon]}>
-              <Popup>
-                <strong>{place.place_name}</strong><br />
-                Day {place.day} - {place.time}
-              </Popup>
-            </Marker>
-          ))}
+        <div style={{ height: "400px", width: "100%", borderRadius: "12px", overflow: "hidden", marginBottom: "15px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
+          <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            />
+            
+            <ChangeMapView center={followLeader ? mapCenter : null} />
+            <MapZoomListener onChangeZoom={setZoomLevel} />
 
-          {/* Leader Marker */}
-          {leaderLocation && (
-            <Marker position={[leaderLocation.lat, leaderLocation.lon]} icon={leaderIcon}>
-              <Popup>
-                <strong>👑 Leader Location</strong><br />
-                Last active: {new Date(leaderLocation.updated_at).toLocaleTimeString()}
-              </Popup>
-            </Marker>
+            {/* Activities plan markers */}
+            {mapPlaces.map((place, idx) => (
+              <Marker key={idx} position={[place.lat, place.lon]}>
+                <Popup>
+                  <strong>{place.place_name}</strong><br />
+                  Day {place.day} - {place.time}
+                </Popup>
+              </Marker>
+            ))}
+
+            {/* Render Clustered Member Markers */}
+            {clusteredLocations.map((cluster, cIdx) => {
+              if (cluster.members.length === 1) {
+                const member = cluster.members[0];
+                const isOffline = member.status === "Offline";
+                const distText = member.role === "owner" ? "0.0 km (Leader)" : member.distance_from_leader;
+                const timeText = formatLastUpdated(member.last_updated, isOffline);
+                
+                return (
+                  <Marker 
+                    key={`member-single-${cIdx}-${member.user_id}`} 
+                    position={[member.latitude, member.longitude]} 
+                    icon={member.icon}
+                  >
+                    <Popup>
+                      <div style={{ fontSize: "13px", lineHeight: "1.4" }}>
+                        <strong>👤 {member.username}</strong><br />
+                        <strong>Role:</strong> {member.role === "owner" ? "Leader" : member.role}<br />
+                        <strong>Status:</strong> <span style={{ color: member.status === "Online" ? "#16a34a" : "#dc2626", fontWeight: "600" }}>{member.status}</span><br />
+                        <strong>Last Updated:</strong> {timeText}<br />
+                        <strong>Distance from Leader:</strong> {distText}
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              } else {
+                return (
+                  <Marker
+                    key={`member-cluster-${cIdx}`}
+                    position={[cluster.centerLat, cluster.centerLon]}
+                    icon={createClusterIcon(cluster.members.length)}
+                  >
+                    <Popup>
+                      <div style={{ maxHeight: "160px", overflowY: "auto", fontSize: "13px" }}>
+                        <strong>👥 {cluster.members.length} Members in this area:</strong>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+                          {cluster.members.map(m => {
+                            const isOffline = m.status === "Offline";
+                            const distText = m.role === "owner" ? "0.0 km" : m.distance_from_leader;
+                            return (
+                              <div key={m.user_id} style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "4px" }}>
+                                <strong>{m.username}</strong> ({m.role === "owner" ? "Leader" : m.role})<br />
+                                Status: <span style={{ color: m.status === "Online" ? "#16a34a" : "#dc2626" }}>{m.status}</span> | Dist: {distText}<br />
+                                <span style={{ fontSize: "11px", color: "#64748b" }}>{formatLastUpdated(m.last_updated, isOffline)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              }
+            })}
+          </MapContainer>
+        </div>
+
+        {/* Dynamic Legend and Destination Arrival Tracker */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px", marginBottom: "15px" }}>
+          {/* Map Legend */}
+          <div className="map-legend" style={{
+            padding: "16px",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "12px",
+            fontSize: "13px",
+            color: "#475569",
+            boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+          }}>
+            <h4 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "14px" }}>🗺️ Map Legend</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", background: "#ef4444", border: "1px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}></span>
+                <strong>Trip Leader</strong>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", background: "#22c55e", border: "1px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}></span>
+                <strong>Active Members</strong> (Green, Gold, Violet, Orange)
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", background: "#3b82f6", border: "1px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}></span>
+                <strong>Planned Activities</strong> (Blue)
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", background: "#94a3b8", border: "1px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}></span>
+                <strong>Offline / Sharing Disabled</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Arrival Detection Tracker */}
+          {currentDestination && (
+            <div className="arrival-tracker-panel" style={{
+              padding: "16px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "12px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+            }}>
+              <h4 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+                📍 Arrival Tracker
+              </h4>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
+                <span style={{ fontSize: "13px", fontWeight: "500", color: "#475569" }}>Destination:</span>
+                <select
+                  value={selectedDestinationIndex}
+                  onChange={(e) => setSelectedDestinationIndex(Number(e.target.value))}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "12px",
+                    color: "#1e293b",
+                    background: "white"
+                  }}
+                >
+                  {mapPlaces.map((place, idx) => (
+                    <option key={idx} value={idx}>
+                      Day {place.day}: {place.place_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginBottom: "8px" }}>
+                {currentDestination.place_name}
+              </div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px", maxHeight: "120px", overflowY: "auto" }}>
+                {arrivalList.map((m, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px" }}>
+                    <span style={{ color: "#334155" }}>
+                      {m.arrived ? "✓" : "✗"} {m.username} <small style={{ color: "#64748b" }}>({m.role})</small>
+                    </span>
+                    <span style={{
+                      fontWeight: "500",
+                      color: m.arrived ? "#16a34a" : m.status === "Sharing Disabled" ? "#dc2626" : "#64748b"
+                    }}>
+                      {m.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              
+              <div style={{
+                fontSize: "12px",
+                fontWeight: "600",
+                color: "#1e3a8a",
+                background: "#dbeafe",
+                padding: "6px 10px",
+                borderRadius: "6px",
+                display: "inline-block"
+              }}>
+                {arrivedCount}/{activeMembersForArrival.length} Active Members Arrived
+              </div>
+            </div>
           )}
-        </MapContainer>
+        </div>
 
-        {/* Location Simulator Panel (Only visible to the leader) */}
-        {isOwner && (
+        {/* Location Simulator Panel (Visible to editors & leader) */}
+        {canEdit && (
           <div className="simulator-panel">
-            <h4>⚙️ Leader Location Simulator Panel</h4>
+            <h4>⚙️ Live Location Simulator Panel ({isOwner ? "Leader" : "Member"})</h4>
             <p style={{ fontSize: "12px", color: "#475569", margin: "-6px 0 10px 0" }}>
-              Test proximity tracking: Teleport to place (triggers "arrival" broadcast) and simulation of moving away (triggers "left place" broadcast and expense logging modal).
+              Test proximity tracking: Teleport to place and simulation of moving away.
             </p>
             {mapPlaces.length === 0 ? (
               <p style={{ color: "#ef4444", fontSize: "13px" }}>No places with coordinates are in the itinerary. Please edit saved trip to add coordinates first!</p>
@@ -642,6 +1287,121 @@ export default function CollaborationDashboard() {
       <VotingBoard groupedSuggestions={groupedSuggestions} onVote={actions.vote} onReact={actions.react} onFinalize={actions.finalize} canFinalize={isOwner} />
       {canEdit && <SuggestionFeed suggestions={suggestions} onAddSuggestion={actions.addSuggestion} onComment={actions.comment} />}
       <ActivityRanking activities={activities} onRank={actions.rank} />
+
+      {/* 4. Collapsible Group Chat Panel */}
+      <div className={`group-chat-widget ${chatCollapsed ? "collapsed" : "expanded"}`}>
+        <div className="chat-header" onClick={() => setChatCollapsed(!chatCollapsed)}>
+          <div className="chat-header-title">
+            💬 Group Chat {chatCollapsed && unreadCount > 0 && <span className="unread-badge">({unreadCount})</span>}
+          </div>
+          <button className="chat-toggle-btn">
+            {chatCollapsed ? "▲" : "▼"}
+          </button>
+        </div>
+        
+        {!chatCollapsed && (
+          <>
+            <div className="chat-messages-container">
+              {chatMessages.length === 0 ? (
+                <div className="chat-empty-state">No messages yet. Send a message to start!</div>
+              ) : (
+                chatMessages.map((msg) => {
+                  const currentUserId = (() => {
+                    try {
+                      const userStr = localStorage.getItem("user");
+                      return userStr ? JSON.parse(userStr).id : null;
+                    } catch {
+                      return null;
+                    }
+                  })();
+                  const isOwn = msg.user_id === currentUserId;
+                  const memberLoc = memberLocations.find((l) => l.user_id === msg.user_id);
+                  const isOnline = memberLoc ? memberLoc.status === "Online" : false;
+                  
+                  if (msg.message_type === "system") {
+                    return (
+                      <div key={msg.id} className="chat-msg system-msg">
+                        <span className="system-msg-text">{msg.message}</span>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div 
+                      key={msg.id} 
+                      className={`chat-msg ${isOwn ? "own-msg" : "other-msg"} ${
+                        msg.message_type === "announcement" ? "announcement-msg" : ""
+                      }`}
+                    >
+                      <div className="msg-sender">
+                        <span className={`presence-dot ${isOnline ? "online" : "offline"}`} title={isOnline ? "Online" : "Offline"}></span>
+                        <strong>{msg.username}</strong>
+                        {msg.message_type === "announcement" && <span className="announcement-tag">📢 Announcement</span>}
+                      </div>
+                      <div className="msg-bubble">
+                        {msg.message}
+                      </div>
+                      <div className="msg-timestamp">
+                        {formatTime(msg.created_at)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Typing Indicator */}
+            {Object.values(typingUsers).length > 0 && (
+              <div className="chat-typing-indicator">
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+                <small>{getTypingText()}</small>
+              </div>
+            )}
+
+            {/* Chat Input area */}
+            <form onSubmit={handleSendMessage} className="chat-input-form">
+              {isOwner && (
+                <div className="chat-type-toggle">
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="msg_type" 
+                      value="text" 
+                      checked={msgType === "text"} 
+                      onChange={() => setMsgType("text")}
+                    />
+                    Text
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="msg_type" 
+                      value="announcement" 
+                      checked={msgType === "announcement"} 
+                      onChange={() => setMsgType("announcement")}
+                    />
+                    Announcement
+                  </label>
+                </div>
+              )}
+              <div className="chat-input-row">
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  value={messageInput}
+                  onChange={handleInputChange}
+                  maxLength={1000}
+                  required
+                />
+                <button type="submit">Send</button>
+              </div>
+            </form>
+          </>
+        )}
+      </div>
     </main>
   );
 }

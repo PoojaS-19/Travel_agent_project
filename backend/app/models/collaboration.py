@@ -260,3 +260,46 @@ class LeaderLocation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     trip = relationship("Itinerary")
+
+
+class MemberLocation(Base):
+    __tablename__ = "member_locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    is_sharing = Column(Boolean, default=True, nullable=False)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    trip = relationship("Itinerary")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("trip_id", "user_id", name="uq_member_location_user"),
+        Index("ix_member_locations_trip_user", "trip_id", "user_id"),
+    )
+
+
+class TripChatMessage(Base):
+    __tablename__ = "trip_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    message = Column(Text, nullable=False)
+    message_type = Column(String(50), default="text", nullable=False)  # "text", "system", "announcement"
+    message_uuid = Column(String(36), unique=True, index=True, nullable=True)
+    is_pinned = Column(Boolean, default=False, nullable=False)
+    message_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    trip = relationship("Itinerary")
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_trip_chat_messages_trip_created", "trip_id", "created_at"),
+    )
+
+

@@ -30,6 +30,8 @@ from app.models.collaboration import (
     TripExpense,
     TripVisit,
     LeaderLocation,
+    MemberLocation,
+    TripChatMessage,
 )
 
 __all__ = [
@@ -62,4 +64,6 @@ __all__ = [
     "TripExpense",
     "TripVisit",
     "LeaderLocation",
+    "MemberLocation",
+    "TripChatMessage",
 ]

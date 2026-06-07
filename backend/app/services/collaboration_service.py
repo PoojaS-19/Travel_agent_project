@@ -26,6 +26,7 @@ from app.models.collaboration import (
     TripExpense,
     TripVisit,
     LeaderLocation,
+    MemberLocation,
 )
 from app.models.collaboration_schemas import (
     CollaboratorResponse,
@@ -602,6 +603,9 @@ class CollaborationService:
             leader_loc.updated_at = datetime.utcnow()
         self.db.flush()
         
+        # Sync leader coordinates to member_locations table
+        self.update_member_location(trip_id, user_id, lat, lon)
+        
         trip = self.repo.get_trip(trip_id)
         if not trip or not trip.daily_plans:
             self.db.commit()
@@ -674,6 +678,113 @@ class CollaborationService:
                         
         self.db.commit()
         return leader_loc, events_triggered
+
+    def update_member_location(self, trip_id: int, user_id: int, latitude: float, longitude: float) -> MemberLocation:
+        self.require_member(trip_id, user_id)
+        
+        loc = self.db.query(MemberLocation).filter_by(trip_id=trip_id, user_id=user_id).first()
+        if not loc:
+            loc = MemberLocation(
+                trip_id=trip_id,
+                user_id=user_id,
+                latitude=latitude,
+                longitude=longitude,
+                is_sharing=True,
+                last_updated=datetime.utcnow()
+            )
+            self.db.add(loc)
+        else:
+            loc.latitude = latitude
+            loc.longitude = longitude
+            loc.last_updated = datetime.utcnow()
+        
+        self.db.commit()
+        self.db.refresh(loc)
+        return loc
+
+    def toggle_sharing_status(self, trip_id: int, user_id: int, is_sharing: bool) -> MemberLocation:
+        self.require_member(trip_id, user_id)
+        
+        loc = self.db.query(MemberLocation).filter_by(trip_id=trip_id, user_id=user_id).first()
+        if not loc:
+            loc = MemberLocation(
+                trip_id=trip_id,
+                user_id=user_id,
+                latitude=0.0,
+                longitude=0.0,
+                is_sharing=is_sharing,
+                last_updated=datetime.utcnow()
+            )
+            self.db.add(loc)
+        else:
+            loc.is_sharing = is_sharing
+            loc.last_updated = datetime.utcnow()
+            
+        self.db.commit()
+        self.db.refresh(loc)
+        return loc
+
+    def get_member_locations(self, trip_id: int) -> List[dict]:
+        collaborators = self.repo.list_collaborators(trip_id)
+        user_info = {}
+        for c in collaborators:
+            if c.user:
+                user_info[c.user_id] = {
+                    "username": c.user.username,
+                    "role": self._role_value(c.role)
+                }
+                
+        leader_loc = self.db.query(LeaderLocation).filter_by(trip_id=trip_id).first()
+        leader_lat = leader_loc.lat if leader_loc else None
+        leader_lon = leader_loc.lon if leader_loc else None
+        
+        import math
+        def haversine(lat1, lon1, lat2, lon2):
+            if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+                return None
+            R = 6371.0
+            d_lat = math.radians(lat2 - lat1)
+            d_lon = math.radians(lon2 - lon1)
+            a = math.sin(d_lat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+
+        locs = self.db.query(MemberLocation).filter_by(trip_id=trip_id).all()
+        results = []
+        now = datetime.utcnow()
+        for loc in locs:
+            if loc.user_id not in user_info:
+                continue
+                
+            info = user_info[loc.user_id]
+            diff_secs = (now - loc.last_updated).total_seconds()
+            
+            if not loc.is_sharing:
+                status_str = "Location Sharing Disabled"
+            elif diff_secs <= 60:
+                status_str = "Online"
+            else:
+                status_str = "Offline"
+                
+            dist_str = "Distance unavailable"
+            if loc.is_sharing and leader_lat is not None and leader_lon is not None:
+                dist_km = haversine(loc.latitude, loc.longitude, leader_lat, leader_lon)
+                if dist_km is not None:
+                    dist_str = f"{round(dist_km, 1)} km"
+                    
+            results.append({
+                "trip_id": trip_id,
+                "user_id": loc.user_id,
+                "username": info["username"],
+                "role": info["role"],
+                "latitude": loc.latitude if loc.is_sharing else 0.0,
+                "longitude": loc.longitude if loc.is_sharing else 0.0,
+                "is_sharing": loc.is_sharing,
+                "last_updated": loc.last_updated,
+                "status": status_str,
+                "distance_from_leader": dist_str
+            })
+        return results
 
     def log_expense(self, trip_id: int, user_id: int, place_name: str, amount: Decimal, description: Optional[str]) -> TripExpense:
         self.require_member(trip_id, user_id)
