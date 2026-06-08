@@ -2,11 +2,62 @@ import requests
 import sys
 import sqlite3
 import json
+import io
+
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except AttributeError:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BASE_URL = "http://127.0.0.1:8000"
 
+class DBConnectionWrapper:
+    def __init__(self):
+        db_url = os.getenv("DATABASE_URL", "sqlite:///travel_planner.db")
+        self.is_postgres = db_url.startswith("postgresql")
+        if self.is_postgres:
+            import psycopg2
+            self.conn = psycopg2.connect(db_url)
+        else:
+            self.conn = sqlite3.connect("travel_planner.db")
+
+    def cursor(self):
+        return DBCursorWrapper(self.conn.cursor(), self.is_postgres)
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
+
+class DBCursorWrapper:
+    def __init__(self, cursor, is_postgres):
+        self.cursor = cursor
+        self.is_postgres = is_postgres
+
+    def execute(self, sql, params=None):
+        if self.is_postgres:
+            sql = sql.replace("?", "%s")
+        if params is None:
+            self.cursor.execute(sql)
+        else:
+            self.cursor.execute(sql, params)
+
+    def fetchone(self):
+        return self.cursor.fetchone()
+
+    def fetchall(self):
+        return self.cursor.fetchall()
+
+    def close(self):
+        self.cursor.close()
+
 def get_db_connection():
-    return sqlite3.connect("travel_planner.db")
+    return DBConnectionWrapper()
 
 def setup_users():
     print("--- 1. Creating and verifying test users ---")
@@ -32,7 +83,7 @@ def setup_users():
     # Force verify users in DB
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("UPDATE users SET is_verified = 1 WHERE email IN ('test_leader@example.com', 'test_buddy@example.com')")
+    c.execute("UPDATE users SET is_verified = true WHERE email IN ('test_leader@example.com', 'test_buddy@example.com')")
     
     # Get user IDs
     c.execute("SELECT id, email FROM users WHERE email IN ('test_leader@example.com', 'test_buddy@example.com')")
@@ -87,7 +138,9 @@ def create_itinerary(leader_id):
         "INSERT INTO itineraries (user_id, start_city, destination, itinerary_text, daily_plans, language, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (leader_id, "Mumbai", "Mumbai", "Test Itinerary Summary", json.dumps(daily_plans_mock), "English", "2026-05-30 00:00:00")
     )
-    itinerary_id = c.lastrowid
+    # Database-agnostic lastrowid query
+    c.execute("SELECT id FROM itineraries WHERE user_id = ? ORDER BY id DESC LIMIT 1", (leader_id,))
+    itinerary_id = c.fetchone()[0]
     conn.commit()
     conn.close()
     print(f"Created itinerary ID {itinerary_id} for leader user ID {leader_id}")
@@ -279,6 +332,97 @@ def test_itinerary_progression(leader_token, buddy_token, itinerary_id):
     assert "👑 test_leader skipped Taj Mahal Palace Hotel. Trip completed!" in last_msg
     print("End-of-trip system message validation: PASSED")
 
+def test_phase3_arrival_hysteresis_and_metadata(leader_token, buddy_token, itinerary_id):
+    print("\n--- 7. Testing Phase 3 GPS Hysteresis and Visit Metadata ---")
+    leader_headers = {"Authorization": f"Bearer {leader_token}"}
+    buddy_headers = {"Authorization": f"Bearer {buddy_token}"}
+    
+    # Verify current_visit exists in response
+    res = requests.get(f"{BASE_URL}/itineraries/{itinerary_id}", headers=leader_headers)
+    assert res.status_code == 200
+    assert "current_visit" in res.json()
+    
+    # Get initial chat messages count
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    initial_chat_len = len(res_chat.json())
+    
+    # 1. Teleport leader to Gateway of India (within 150m boundary)
+    # 18.9220, 72.8338 is approx 100m away
+    print("Teleporting leader to Gateway of India (within 150m boundary)...")
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/leader-location", json={"lat": 18.9220, "lon": 72.8338}, headers=leader_headers)
+    assert res.status_code == 200
+    
+    # Verify leader arrived message is logged in chat history
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    chat_msgs = res_chat.json()[initial_chat_len:]
+    system_msgs = [m["message"] for m in chat_msgs if m["message_type"] == "system"]
+    print("Logged system messages:", system_msgs)
+    assert any("👑 test_leader arrived at Gateway of India." in m for m in system_msgs)
+    
+    # Verify current_visit status and arrived_at are populated
+    res_itinerary = requests.get(f"{BASE_URL}/itineraries/{itinerary_id}", headers=leader_headers)
+    visit = res_itinerary.json().get("current_visit")
+    assert visit is not None
+    assert visit["place_name"] == "Gateway of India"
+    assert visit["status"] == "arrived"
+    assert visit["arrived_at"] is not None
+    
+    # 2. Test leader drift (between 150m and 250m, e.g. 200m)
+    # 18.9220, 72.8329 is approx 200m away
+    print("Leader drifts to ~200m away (hysteresis region)...")
+    initial_chat_len = len(res_chat.json())
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/leader-location", json={"lat": 18.9220, "lon": 72.8329}, headers=leader_headers)
+    assert res.status_code == 200
+    
+    # Verify no new arrival/departure system messages are logged
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    chat_msgs = res_chat.json()[initial_chat_len:]
+    system_msgs = [m["message"] for m in chat_msgs if m["message_type"] == "system"]
+    assert len(system_msgs) == 0
+    print("Leader drift inside hysteresis zone: PASSED (no duplicate event triggered)")
+    
+    # 3. Test buddy live location tracking and hysteresis
+    # Buddy starts outside (400m away, 18.9220, 72.8311)
+    print("Buddy sharing location outside (400m)...")
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/locations", json={"latitude": 18.9220, "longitude": 72.8311, "is_sharing": True}, headers=buddy_headers)
+    assert res.status_code == 200
+    
+    initial_chat_len = len(res_chat.json())
+    # Buddy moves within 150m (100m away, 18.9220, 72.8338)
+    print("Buddy moves inside 150m...")
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/locations", json={"latitude": 18.9220, "longitude": 72.8338, "is_sharing": True}, headers=buddy_headers)
+    assert res.status_code == 200
+    
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    chat_msgs = res_chat.json()[initial_chat_len:]
+    system_msgs = [m["message"] for m in chat_msgs if m["message_type"] == "system"]
+    print("Logged system messages for buddy:", system_msgs)
+    assert any("test_buddy arrived at Gateway of India." in m for m in system_msgs)
+    
+    # Buddy drifts to 200m (between 150m and 250m)
+    print("Buddy drifts to ~200m away (hysteresis region)...")
+    initial_chat_len = len(res_chat.json())
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/locations", json={"latitude": 18.9220, "longitude": 72.8329, "is_sharing": True}, headers=buddy_headers)
+    assert res.status_code == 200
+    
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    chat_msgs = res_chat.json()[initial_chat_len:]
+    system_msgs = [m["message"] for m in chat_msgs if m["message_type"] == "system"]
+    assert len(system_msgs) == 0
+    print("Buddy drift inside hysteresis zone: PASSED")
+    
+    # Buddy leaves beyond 250m (300m away, 18.9220, 72.8320)
+    print("Buddy leaves beyond 250m...")
+    res = requests.post(f"{BASE_URL}/api/trips/{itinerary_id}/locations", json={"latitude": 18.9220, "longitude": 72.8320, "is_sharing": True}, headers=buddy_headers)
+    assert res.status_code == 200
+    
+    res_chat = requests.get(f"{BASE_URL}/api/trips/{itinerary_id}/chat", headers=leader_headers)
+    chat_msgs = res_chat.json()[initial_chat_len:]
+    system_msgs = [m["message"] for m in chat_msgs if m["message_type"] == "system"]
+    print("Logged system messages for buddy leaving:", system_msgs)
+    assert any("test_buddy left Gateway of India." in m for m in system_msgs)
+    print("Buddy left trigger: PASSED")
+
 def clean_database(itinerary_id, leader_id, buddy_id):
     print("\n--- Cleaning up test records ---")
     conn = get_db_connection()
@@ -322,6 +466,7 @@ def main():
         
         test_live_location_alarms(leader_token, itinerary_id)
         test_expenses_and_splitting(leader_token, buddy_token, itinerary_id)
+        test_phase3_arrival_hysteresis_and_metadata(leader_token, buddy_token, itinerary_id)
         test_itinerary_progression(leader_token, buddy_token, itinerary_id)
         
         clean_database(itinerary_id, leader_id, buddy_id)

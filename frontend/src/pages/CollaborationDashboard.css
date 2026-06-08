@@ -1260,3 +1260,395 @@
   border-color: rgba(255, 255, 255, 0.35) !important;
 }
 
+
+
+/* --- Arrival Tracker Panel --- */
+.arrival-tracker-panel {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+}
+
+.arrival-panel-title {
+  margin: 0 0 16px 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tracking-target-section {
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.active-target-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.active-target-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #3b82f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.target-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.select-target-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.target-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.target-select {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #1e293b;
+  background: white;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.target-select:focus {
+  border-color: #3b82f6;
+}
+
+/* Leader Presence & Stay Duration Box */
+.leader-status-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.leader-presence-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leader-presence-badge.present {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.leader-presence-badge.away {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.leader-stay-info {
+  font-size: 12px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stay-label {
+  font-weight: 500;
+}
+
+.stay-value {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* Members List */
+.members-arrival-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-right: 4px;
+}
+
+.member-arrival-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  transition: background-color 0.2s;
+}
+
+.member-arrival-row.is-leader {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.member-name-col {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.username-text {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-tag {
+  font-size: 10px;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.member-arrival-row.is-leader .role-tag {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.arrival-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.arrival-status-badge.arrived {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.arrival-status-badge.not-arrived {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.arrival-status-badge.sharing-disabled {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.arrival-status-badge.location-expired {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.arrival-tracker-footer {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* --- Smart Suggestion Card --- */
+.smart-suggestion-card {
+  display: flex;
+  gap: 16px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+  margin-bottom: 8px;
+  animation: slideInUp 0.3s ease;
+}
+
+.suggestion-icon {
+  font-size: 24px;
+}
+
+.suggestion-content {
+  flex: 1;
+}
+
+.suggestion-content h5 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.suggestion-content p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #1e40af;
+  line-height: 1.4;
+}
+
+.suggestion-action-btn {
+  background: #2563eb !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+}
+
+.suggestion-action-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* --- Assisted Auto-Completion Card --- */
+.assisted-completion-prompt-card {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+  margin-bottom: 15px;
+  animation: slideInUp 0.3s ease;
+}
+
+.assisted-completion-prompt-card .prompt-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: #78350f;
+  margin-bottom: 6px;
+}
+
+.assisted-completion-prompt-card .prompt-body p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.assisted-completion-prompt-card .prompt-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.assisted-completion-prompt-card .prompt-btn-complete {
+  background: #d97706 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+}
+
+.assisted-completion-prompt-card .prompt-btn-complete:hover {
+  background: #b45309 !important;
+}
+
+.assisted-completion-prompt-card .prompt-btn-dismiss {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+.assisted-completion-prompt-card .prompt-btn-dismiss:hover {
+  background: #e5e7eb !important;
+}
+
+/* Endpoint Badges */
+.endpoint-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.endpoint-badge.start-badge {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.endpoint-badge.end-badge {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.endpoint-arrival-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  display: inline-block;
+}
+
+.endpoint-arrival-badge.start {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.endpoint-arrival-badge.end {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+

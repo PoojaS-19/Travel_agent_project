@@ -83,12 +83,41 @@ def serialize_itinerary_with_access(itinerary: Itinerary, user_id: int, role: st
     except Exception as e:
         print("Error serializing collaborators in itinerary:", e)
 
+    current_visit_info = None
+    try:
+        from app.models.collaboration import TripVisit
+        current_dest_name = None
+        for day in (itinerary.daily_plans or []):
+            for act in day.get("activities", []):
+                if act.get("status") == "current":
+                    current_dest_name = act.get("place_name")
+                    break
+            if current_dest_name:
+                break
+        if current_dest_name:
+            from app.database import SessionLocal
+            db_session = SessionLocal()
+            try:
+                visit = db_session.query(TripVisit).filter_by(trip_id=itinerary.id, place_name=current_dest_name).first()
+                if visit:
+                    current_visit_info = {
+                        "place_name": visit.place_name,
+                        "status": visit.status,
+                        "arrived_at": visit.arrived_at.isoformat() + "Z" if visit.arrived_at else None,
+                        "left_at": visit.left_at.isoformat() + "Z" if visit.left_at else None,
+                    }
+            finally:
+                db_session.close()
+    except Exception as e:
+        print("Error fetching current visit info in itinerary serialization:", e)
+
     data.update({
         "owner_user_id": itinerary.user_id,
         "collaboration_role": access_role,
         "is_shared": itinerary.user_id != user_id,
         "can_edit": itinerary.user_id == user_id,
         "members": members,
+        "current_visit": current_visit_info,
     })
     return data
 

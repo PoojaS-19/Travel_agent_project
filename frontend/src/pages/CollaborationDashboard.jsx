@@ -58,9 +58,44 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+const parseUTCDate = (dateStr) => {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  if (typeof dateStr === "string" && !dateStr.endsWith("Z") && !/[+-]\d{2}:?\d{2}$/.test(dateStr)) {
+    return new Date(dateStr + "Z");
+  }
+  return new Date(dateStr);
+};
+
+const getActivityTypeDetails = (activity) => {
+  if (!activity) return { emoji: "○", name: "Activity", color: "#64748b" };
+  const category = (activity.category || "").toLowerCase();
+  const title = (activity.place_name || "").toLowerCase();
+  const desc = (activity.description || "").toLowerCase();
+
+  // Heuristics for keywords if category is empty/travel/relax etc
+  if (category === "food" || title.includes("restaurant") || title.includes("shamiana") || title.includes("dining") || title.includes("café") || title.includes("cafe") || title.includes("lunch") || title.includes("dinner") || desc.includes("eat") || desc.includes("dine") || desc.includes("food")) {
+    return { emoji: "🍔", name: "Dining", color: "#f97316" };
+  }
+  if (category === "travel" || title.includes("airport") || title.includes("flight") || title.includes("train") || title.includes("station") || title.includes("cab") || title.includes("drive") || title.includes("taxi") || title.includes("transit") || title.includes("travel") || desc.includes("drive") || desc.includes("ride") || desc.includes("travel")) {
+    return { emoji: "🚗", name: "Transit", color: "#3b82f6" };
+  }
+  if (category === "relax" && (title.includes("hotel") || title.includes("resort") || title.includes("stay") || title.includes("lodging") || title.includes("homestay") || title.includes("villa") || desc.includes("check-in") || desc.includes("check in") || desc.includes("stay at"))) {
+    return { emoji: "🏨", name: "Lodging", color: "#a855f7" };
+  }
+  if (category === "shopping" || title.includes("market") || title.includes("mall") || title.includes("bazaar") || title.includes("shop") || desc.includes("buy") || desc.includes("souvenir") || desc.includes("shop")) {
+    return { emoji: "🛍️", name: "Shopping", color: "#ec4899" };
+  }
+  if (category === "relax" || title.includes("beach") || title.includes("spa") || title.includes("garden") || title.includes("park") || title.includes("lake") || desc.includes("relax") || desc.includes("leisure")) {
+    return { emoji: "🧘", name: "Leisure", color: "#10b981" };
+  }
+  // Default is Sightseeing/Attraction
+  return { emoji: "🏛️", name: "Sightseeing", color: "#06b6d4" };
+};
+
 function formatLastUpdated(dateStr, isOffline = false) {
   if (!dateStr) return "Never";
-  const diffMs = Math.max(0, new Date() - new Date(dateStr));
+  const diffMs = Math.max(0, new Date() - parseUTCDate(dateStr));
   const diffSecs = Math.floor(diffMs / 1000);
   if (diffSecs < 10) {
     return isOffline ? "Last seen just now" : "Updated just now";
@@ -132,6 +167,8 @@ export default function CollaborationDashboard() {
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const prevMessagesLength = useRef(0);
+  const previousArrivalStatesRef = useRef({});
+  const prevDestNameRef = useRef(null);
 
   // Auto-scroll to bottom of chat when messages change or it is expanded
   useEffect(() => {
@@ -207,7 +244,7 @@ export default function CollaborationDashboard() {
   const formatTime = (timeStr) => {
     if (!timeStr) return "";
     try {
-      const d = new Date(timeStr);
+      const d = parseUTCDate(timeStr);
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     } catch (err) {
       return "";
@@ -363,6 +400,129 @@ export default function CollaborationDashboard() {
   const [selectedDestinationIndex, setSelectedDestinationIndex] = useState(0);
   const [lastSent, setLastSent] = useState(null);
 
+  const [dismissedAutoPrompts, setDismissedAutoPrompts] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`dismissed_prompts_${tripId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const dismissAutoPrompt = (placeName) => {
+    const updated = {
+      ...dismissedAutoPrompts,
+      [placeName]: Date.now()
+    };
+    setDismissedAutoPrompts(updated);
+    try {
+      localStorage.setItem(`dismissed_prompts_${tripId}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const isPromptDismissed = (placeName) => {
+    const timestamp = dismissedAutoPrompts[placeName];
+    if (!timestamp) return false;
+    // 15 minutes cooldown (900000 milliseconds)
+    const cooldownActive = Date.now() - timestamp < 900000;
+    return cooldownActive;
+  };
+
+  const flatActivities = useMemo(() => {
+    if (!itinerary?.daily_plans) return [];
+    const list = [];
+    itinerary.daily_plans.forEach((dayPlan) => {
+      (dayPlan.activities || []).forEach((act) => {
+        list.push({
+          ...act,
+          day: dayPlan.day,
+          date: dayPlan.date,
+          lat: act.lat !== undefined && act.lat !== null ? Number(act.lat) : null,
+          lon: act.lon !== undefined && act.lon !== null ? Number(act.lon) : null
+        });
+      });
+    });
+    return list;
+  }, [itinerary]);
+
+  const currentActivityIndex = useMemo(() => {
+    const hasAnyStatus = flatActivities.some(a => a.status === "current" || a.status === "completed" || a.status === "skipped");
+    let idx = flatActivities.findIndex(a => a.status === "current");
+    if (idx === -1 && !flatActivities.every(a => a.status === "completed" || a.status === "skipped") && hasAnyStatus) {
+      return 0;
+    }
+    return idx;
+  }, [flatActivities]);
+
+  const currentAct = currentActivityIndex !== -1 ? flatActivities[currentActivityIndex] : null;
+  const nextAct = (currentActivityIndex !== -1 && currentActivityIndex < flatActivities.length - 1) ? flatActivities[currentActivityIndex + 1] : null;
+
+  const dailyEndpoints = useMemo(() => {
+    if (!itinerary?.daily_plans) return {};
+    const endpoints = {};
+    itinerary.daily_plans.forEach((dayPlan) => {
+      const dayActivities = dayPlan.activities || [];
+      if (dayActivities.length > 0) {
+        endpoints[dayPlan.day] = {
+          start: dayActivities[0].place_name,
+          end: dayActivities[dayActivities.length - 1].place_name
+        };
+      }
+    });
+    return endpoints;
+  }, [itinerary]);
+
+  const leaderLocEntry = useMemo(() => {
+    return (memberLocations || []).find(l => {
+      if (l.role === "owner") return true;
+      const memberInfo = (dashboard?.members || []).find(m => m.user_id === l.user_id);
+      return memberInfo && memberInfo.role === "owner";
+    });
+  }, [memberLocations, dashboard]);
+
+  const showAssistedCompletion = useMemo(() => {
+    if (!currentAct || !canEdit) return false;
+    
+    // Check if dismissed and active cooldown
+    const isDismissed = isPromptDismissed(currentAct.place_name);
+    if (isDismissed) return false;
+
+    if (!leaderLocEntry || !leaderLocEntry.is_sharing) return false;
+
+    // Check if leader location is stale (> 10 mins)
+    const nowTime = new Date();
+    const diffMs = nowTime - parseUTCDate(leaderLocEntry.last_updated);
+    if (diffMs > 600000) return false;
+
+    const currentActDetails = getActivityTypeDetails(currentAct);
+    const isTransit = currentActDetails.name === "Transit";
+
+    if (isTransit) {
+      // Transit activities use next endpoint arrival detection (150m)
+      if (nextAct && nextAct.lat !== null && nextAct.lon !== null) {
+        const distToNext = haversineDistance(leaderLocEntry.latitude, leaderLocEntry.longitude, nextAct.lat, nextAct.lon);
+        return distToNext !== null && distToNext <= 0.15;
+      }
+      return false;
+    } else {
+      // Standard activities use simple departure detection (250m)
+      if (currentAct.lat !== null && currentAct.lon !== null) {
+        const distFromCurrent = haversineDistance(leaderLocEntry.latitude, leaderLocEntry.longitude, currentAct.lat, currentAct.lon);
+        if (distFromCurrent !== null && distFromCurrent >= 0.25) {
+          return true;
+        }
+      }
+      // General fallback: if they arrive at next planned activity
+      if (nextAct && nextAct.lat !== null && nextAct.lon !== null) {
+        const distToNext = haversineDistance(leaderLocEntry.latitude, leaderLocEntry.longitude, nextAct.lat, nextAct.lon);
+        return distToNext !== null && distToNext <= 0.15;
+      }
+      return false;
+    }
+  }, [currentAct, nextAct, leaderLocEntry, canEdit, dismissedAutoPrompts]);
+
   // Dynamic timing refresh
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 5000);
@@ -466,7 +626,7 @@ export default function CollaborationDashboard() {
         if (!loc.is_sharing) return false;
         
         // Exclude members with expired locations (> 10 minutes)
-        const diffMs = nowTime - new Date(loc.last_updated);
+        const diffMs = nowTime - parseUTCDate(loc.last_updated);
         if (diffMs > 600000) return false;
         
         return true;
@@ -514,10 +674,51 @@ export default function CollaborationDashboard() {
   }, [activeLocations, zoomLevel]);
 
   // Destination Arrival Tracking
+  const currentActiveDestination = useMemo(() => {
+    if (!itinerary?.daily_plans) return null;
+    let found = null;
+    itinerary.daily_plans.forEach((dayPlan) => {
+      (dayPlan.activities || []).forEach((act) => {
+        if (act.status === "current") {
+          found = {
+            place_name: act.place_name,
+            lat: act.lat !== undefined && act.lat !== null ? Number(act.lat) : null,
+            lon: act.lon !== undefined && act.lon !== null ? Number(act.lon) : null,
+            day: dayPlan.day,
+            time: act.time || "Flexible"
+          };
+        }
+      });
+    });
+    return found;
+  }, [itinerary]);
+
+  const leaderStayDuration = useMemo(() => {
+    if (!itinerary?.current_visit?.arrived_at || itinerary?.current_visit?.status !== "arrived") return null;
+    const diffMs = now - parseUTCDate(itinerary.current_visit.arrived_at);
+    return Math.max(0, Math.floor(diffMs / 1000)); // duration in seconds
+  }, [itinerary, now]);
+
+  const formatDuration = (seconds) => {
+    if (seconds === null || seconds === undefined) return "";
+    const m = Math.floor(seconds / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    const mins = m % 60;
+    return `${h}h ${mins}m`;
+  };
+
   const currentDestination = mapPlaces[selectedDestinationIndex] || null;
+  const targetDest = currentActiveDestination || currentDestination;
 
   const arrivalList = useMemo(() => {
-    if (!currentDestination) return [];
+    if (!targetDest || targetDest.lat === null || targetDest.lon === null) return [];
+    
+    // Reset arrival history when target place changes
+    if (prevDestNameRef.current !== targetDest.place_name) {
+      previousArrivalStatesRef.current = {};
+      prevDestNameRef.current = targetDest.place_name;
+    }
     
     const nowTime = new Date();
     const members = dashboard?.members || [];
@@ -532,14 +733,23 @@ export default function CollaborationDashboard() {
       
       if (loc) {
         sharing = loc.is_sharing;
-        const diffMs = nowTime - new Date(loc.last_updated);
+        const diffMs = nowTime - parseUTCDate(loc.last_updated);
         isStale = diffMs > 600000;
         
         if (loc.is_sharing && !isStale) {
-          const distKm = haversineDistance(loc.latitude, loc.longitude, currentDestination.lat, currentDestination.lon);
-          if (distKm !== null && distKm <= 0.1) {
-            arrived = true;
+          const distKm = haversineDistance(loc.latitude, loc.longitude, targetDest.lat, targetDest.lon);
+          
+          let previouslyArrived = previousArrivalStatesRef.current[m.user_id] || false;
+          if (distKm !== null) {
+            if (distKm <= 0.15) {
+              arrived = true;
+            } else if (distKm >= 0.25) {
+              arrived = false;
+            } else {
+              arrived = previouslyArrived;
+            }
           }
+          previousArrivalStatesRef.current[m.user_id] = arrived;
           status = arrived ? "Arrived" : "Not Arrived";
         } else if (!loc.is_sharing) {
           status = "Sharing Disabled";
@@ -549,6 +759,7 @@ export default function CollaborationDashboard() {
       }
       
       return {
+        user_id: m.user_id,
         username: m.username || m.email,
         role: m.role,
         arrived,
@@ -557,10 +768,22 @@ export default function CollaborationDashboard() {
         isSharing: sharing
       };
     });
-  }, [memberLocations, currentDestination, dashboard, now]);
+  }, [memberLocations, targetDest, dashboard, now]);
   
   const activeMembersForArrival = useMemo(() => {
     return arrivalList.filter(m => !m.isStale && m.isSharing);
+  }, [arrivalList]);
+
+  const sortedArrivals = useMemo(() => {
+    return [...arrivalList].sort((a, b) => {
+      if (a.role === "owner") return -1;
+      if (b.role === "owner") return 1;
+      return a.username.localeCompare(b.username);
+    });
+  }, [arrivalList]);
+
+  const leaderArrived = useMemo(() => {
+    return arrivalList.find(m => m.role === "owner")?.arrived || false;
   }, [arrivalList]);
   
   const arrivedCount = useMemo(() => {
@@ -867,11 +1090,12 @@ export default function CollaborationDashboard() {
                   }
                 };
 
+                const typeDetails = getActivityTypeDetails(currentAct);
                 return (
                   <div className="current-destination-card">
-                    <span className="card-header-label">Current Destination</span>
+                    <span className="card-header-label">Current Destination &middot; {typeDetails.emoji} {typeDetails.name}</span>
                     <h4 className="card-place-name">
-                      📍 {currentAct.place_name || "Unknown Location"}
+                      {typeDetails.emoji} {currentAct.place_name || "Unknown Location"}
                     </h4>
                     
                     <div className="card-meta-grid">
@@ -879,6 +1103,12 @@ export default function CollaborationDashboard() {
                         <span className="card-meta-title">Status</span>
                         <span className="card-meta-value status-active">Active</span>
                       </div>
+                      {leaderStayDuration !== null && (
+                        <div className="card-meta-item">
+                          <span className="card-meta-title">Stay Duration</span>
+                          <span className="card-meta-value stay-duration-value">⏱ {formatDuration(leaderStayDuration)}</span>
+                        </div>
+                      )}
                       <div className="card-meta-item">
                         <span className="card-meta-title">Destination</span>
                         <span className="card-meta-value">
@@ -912,6 +1142,77 @@ export default function CollaborationDashboard() {
                   </div>
                 );
               })()}
+
+              {/* Assisted Auto-Completion Prompt */}
+              {showAssistedCompletion && currentAct && (
+                <div className="assisted-completion-prompt-card">
+                  <div className="prompt-header">
+                    <span>💡 Assisted Auto-Completion Suggestion</span>
+                  </div>
+                  <div className="prompt-body">
+                    <p>
+                      You appear to have {getActivityTypeDetails(currentAct)?.name === "Transit" ? "arrived at the next destination" : "left " + currentAct.place_name}. Mark <strong>{currentAct.place_name}</strong> as completed?
+                    </p>
+                    <div className="prompt-buttons">
+                      <button
+                        onClick={async () => {
+                          if (progressionLoading) return;
+                          setProgressionLoading(true);
+                          try {
+                            await actions.completeDestination(currentAct.place_name);
+                          } catch (err) {
+                            console.error(err);
+                            alert(err.response?.data?.detail || "Failed to complete destination.");
+                          } finally {
+                            setProgressionLoading(false);
+                          }
+                        }}
+                        disabled={progressionLoading}
+                        className="prompt-btn-complete"
+                      >
+                        {progressionLoading ? "Updating..." : "✓ Complete"}
+                      </button>
+                      <button
+                        onClick={() => dismissAutoPrompt(currentAct.place_name)}
+                        className="prompt-btn-dismiss"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Smart Suggestion Card (Advisory only) */}
+              {canEdit && currentActiveDestination && itinerary?.current_visit?.status === "arrived" && leaderStayDuration >= 1800 && (
+                <div className="smart-suggestion-card">
+                  <div className="suggestion-icon">💡</div>
+                  <div className="suggestion-content">
+                    <h5>Smart Suggestion</h5>
+                    <p>
+                      Leader has been at <strong>{currentActiveDestination.place_name}</strong> for {formatDuration(leaderStayDuration)}. Suggest marking this destination as completed.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        if (progressionLoading) return;
+                        setProgressionLoading(true);
+                        try {
+                          await actions.completeDestination(currentActiveDestination.place_name);
+                        } catch (err) {
+                          console.error(err);
+                          alert(err.response?.data?.detail || "Failed to complete destination.");
+                        } finally {
+                          setProgressionLoading(false);
+                        }
+                      }}
+                      disabled={progressionLoading}
+                      className="suggestion-action-btn"
+                    >
+                      {progressionLoading ? "Updating..." : "✓ Mark Completed"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Trip Progress Bar */}
               {(() => {
@@ -971,7 +1272,13 @@ export default function CollaborationDashboard() {
                         {dayActivities.map((activity, actIdx) => {
                           const status = activity.status || "upcoming";
                           
-                          let statusIcon = "○";
+                          const details = getActivityTypeDetails(activity);
+                          let statusIcon = details.emoji;
+                          
+                          const dayEndpoints = dailyEndpoints[dayPlan.day];
+                          const isStart = dayEndpoints && activity.place_name === dayEndpoints.start;
+                          const isEnd = dayEndpoints && activity.place_name === dayEndpoints.end;
+
                           if (status === "completed") statusIcon = "✓";
                           else if (status === "current") statusIcon = "➜";
                           else if (status === "skipped") statusIcon = "✕";
@@ -985,8 +1292,10 @@ export default function CollaborationDashboard() {
                                 {statusIcon}
                               </span>
                               <div className="timeline-activity-info">
-                                <div className="timeline-activity-title">
-                                  {activity.place_name || "Activity"}
+                                <div className="timeline-activity-title" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                  <span>{activity.place_name || "Activity"}</span>
+                                  {isStart && <span className="endpoint-badge start-badge">🏁 START</span>}
+                                  {isEnd && <span className="endpoint-badge end-badge">🏁 END</span>}
                                 </div>
                                 <div className="timeline-activity-time">
                                   {activity.time || "Flexible"}
@@ -1306,69 +1615,97 @@ export default function CollaborationDashboard() {
           </div>
 
           {/* Arrival Detection Tracker */}
-          {currentDestination && (
-            <div className="arrival-tracker-panel" style={{
-              padding: "16px",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
-            }}>
-              <h4 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+          {targetDest && (
+            <div className="arrival-tracker-panel">
+              <h4 className="arrival-panel-title">
                 📍 Arrival Tracker
               </h4>
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
-                <span style={{ fontSize: "13px", fontWeight: "500", color: "#475569" }}>Destination:</span>
-                <select
-                  value={selectedDestinationIndex}
-                  onChange={(e) => setSelectedDestinationIndex(Number(e.target.value))}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "12px",
-                    color: "#1e293b",
-                    background: "white"
-                  }}
-                >
-                  {mapPlaces.map((place, idx) => (
-                    <option key={idx} value={idx}>
-                      Day {place.day}: {place.place_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
               
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginBottom: "8px" }}>
-                {currentDestination.place_name}
-              </div>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px", maxHeight: "120px", overflowY: "auto" }}>
-                {arrivalList.map((m, idx) => (
-                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px" }}>
-                    <span style={{ color: "#334155" }}>
-                      {m.arrived ? "✓" : "✗"} {m.username} <small style={{ color: "#64748b" }}>({m.role})</small>
-                    </span>
-                    <span style={{
-                      fontWeight: "500",
-                      color: m.arrived ? "#16a34a" : m.status === "Sharing Disabled" ? "#dc2626" : "#64748b"
-                    }}>
-                      {m.status}
-                    </span>
+              <div className="tracking-target-section">
+                {currentActiveDestination ? (
+                  <div className="active-target-info">
+                    <span className="active-target-badge">Active</span>{" "}
+                    <span className="target-name">{currentActiveDestination.place_name}</span>
                   </div>
-                ))}
+                ) : (
+                  <div className="select-target-info">
+                    <span className="target-label">Destination:</span>
+                    <select
+                      value={selectedDestinationIndex}
+                      onChange={(e) => setSelectedDestinationIndex(Number(e.target.value))}
+                      className="target-select"
+                    >
+                      {mapPlaces.map((place, idx) => (
+                        <option key={idx} value={idx}>
+                          Day {place.day}: {place.place_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               
-              <div style={{
-                fontSize: "12px",
-                fontWeight: "600",
-                color: "#1e3a8a",
-                background: "#dbeafe",
-                padding: "6px 10px",
-                borderRadius: "6px",
-                display: "inline-block"
-              }}>
-                {arrivedCount}/{activeMembersForArrival.length} Active Members Arrived
+              {/* Leader presence indicator inside the Arrival Tracker panel */}
+              <div className="leader-status-box">
+                <div className={`leader-presence-badge ${leaderArrived ? "present" : "away"}`}>
+                  {leaderArrived ? "🟢 Leader Present" : "🔴 Leader Away"}
+                </div>
+                {leaderArrived && leaderStayDuration !== null && (
+                  <div className="leader-stay-info">
+                    <span className="stay-label">Stay Duration:</span>
+                    <span className="stay-value">⏱ {formatDuration(leaderStayDuration)}</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="members-arrival-list">
+                {(() => {
+                  const activeDay = currentAct?.day || 1;
+                  const dayEndpoints = dailyEndpoints[activeDay];
+                  const startPlace = flatActivities.find(a => a.day === activeDay && dayEndpoints && a.place_name === dayEndpoints.start);
+                  const endPlace = flatActivities.find(a => a.day === activeDay && dayEndpoints && a.place_name === dayEndpoints.end);
+
+                  return sortedArrivals.map((m, idx) => {
+                    const isLeader = m.role === "owner";
+                    const loc = (memberLocations || []).find(l => l.user_id === m.user_id);
+                    
+                    let endpointBadge = null;
+                    if (loc && loc.is_sharing) {
+                      if (startPlace && startPlace.lat !== null && startPlace.lon !== null) {
+                        const distStart = haversineDistance(loc.latitude, loc.longitude, startPlace.lat, startPlace.lon);
+                        if (distStart !== null && distStart <= 0.15) {
+                          endpointBadge = <span className="endpoint-arrival-badge start">📍 At Start</span>;
+                        }
+                      }
+                      if (!endpointBadge && endPlace && endPlace.lat !== null && endPlace.lon !== null) {
+                        const distEnd = haversineDistance(loc.latitude, loc.longitude, endPlace.lat, endPlace.lon);
+                        if (distEnd !== null && distEnd <= 0.15) {
+                          endpointBadge = <span className="endpoint-arrival-badge end">🏁 At End</span>;
+                        }
+                      }
+                    }
+
+                    return (
+                      <div key={idx} className={`member-arrival-row ${isLeader ? "is-leader" : ""}`}>
+                        <span className="member-name-col">
+                          {isLeader ? "👑 " : m.arrived ? "✓ " : "○ "}
+                          <span className="username-text">{m.username}</span>
+                          <small className="role-tag">
+                            {isLeader ? "Leader" : m.role === "follower" ? "buddy" : m.role}
+                          </small>
+                          {endpointBadge}
+                        </span>
+                        <span className={`arrival-status-badge ${m.arrived ? "arrived" : m.status.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                          {m.status}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              
+              <div className="arrival-tracker-footer">
+                👥 {arrivedCount} of {activeMembersForArrival.length} active members present
               </div>
             </div>
           )}

@@ -27,6 +27,7 @@ from app.models.collaboration import (
     TripVisit,
     LeaderLocation,
     MemberLocation,
+    TripChatMessage,
 )
 from app.models.collaboration_schemas import (
     CollaboratorResponse,
@@ -38,6 +39,10 @@ from app.models.collaboration_schemas import (
 )
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.services.email_service import EmailService
+
+# In-memory tracking of member presence states for GPS hysteresis.
+# Key: (trip_id, user_id, place_name), Value: "arrived" | "left"
+MEMBER_PRESENCE_STATES = {}
 
 
 CLIENT_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
@@ -590,10 +595,133 @@ class CollaborationService:
         self.db.refresh(collaborator)
         return collaborator
 
+    def get_current_destination(self, trip_id: int) -> Optional[dict]:
+        trip = self.repo.get_trip(trip_id)
+        if not trip or not trip.daily_plans:
+            return None
+        from app.services.database_service import normalize_daily_plans
+        normalized = normalize_daily_plans(trip.daily_plans)
+        for day in (normalized or []):
+            for act in day.get("activities", []):
+                if act.get("status") == "current":
+                    return act
+        return None
+
+    def _detect_arrival_transitions(
+        self, trip_id: int, user_id: int, prev_lat: Optional[float], prev_lon: Optional[float], new_lat: float, new_lon: float
+    ) -> List[dict]:
+        current_dest = self.get_current_destination(trip_id)
+        if not current_dest:
+            return []
+            
+        dest_name = current_dest.get("place_name")
+        dest_lat = current_dest.get("lat")
+        dest_lon = current_dest.get("lon")
+        
+        if not dest_name or dest_lat is None or dest_lon is None:
+            return []
+            
+        dest_lat = float(dest_lat)
+        dest_lon = float(dest_lon)
+        
+        import math
+        def get_dist(lat1, lon1, lat2, lon2):
+            return math.sqrt((lat1 - lat2) ** 2 + (lon1 - lon2) ** 2) * 111
+            
+        new_dist = get_dist(new_lat, new_lon, dest_lat, dest_lon)
+        
+        collaborator = self.repo.get_collaborator(trip_id, user_id)
+        if not collaborator or not collaborator.user:
+            return []
+            
+        username = collaborator.user.username
+        role_prefix = "👑 " if collaborator.role == CollaboratorRole.OWNER else ""
+        actor_name = f"{role_prefix}{username}"
+        
+        system_message = None
+        
+        # GPS hysteresis: Arrived within 150m (0.15 km), Left beyond 250m (0.25 km)
+        state_key = (trip_id, user_id, dest_name)
+        current_state = MEMBER_PRESENCE_STATES.get(state_key)
+        
+        if current_state is None:
+            if new_dist < 0.15:
+                MEMBER_PRESENCE_STATES[state_key] = "arrived"
+                system_message = f"{actor_name} arrived at {dest_name}."
+            else:
+                MEMBER_PRESENCE_STATES[state_key] = "left"
+        else:
+            if new_dist < 0.15:
+                if current_state != "arrived":
+                    MEMBER_PRESENCE_STATES[state_key] = "arrived"
+                    system_message = f"{actor_name} arrived at {dest_name}."
+            elif new_dist >= 0.25:
+                if current_state == "arrived":
+                    MEMBER_PRESENCE_STATES[state_key] = "left"
+                    system_message = f"{actor_name} left {dest_name}."
+                
+        if system_message:
+            db_msg = TripChatMessage(
+                trip_id=trip_id,
+                user_id=user_id,
+                message=system_message,
+                message_type="system",
+                created_at=datetime.utcnow()
+            )
+            self.db.add(db_msg)
+            self.db.flush()
+            
+            ws_payload = {
+                "event": "chat_message",
+                "id": db_msg.id,
+                "trip_id": trip_id,
+                "user_id": user_id,
+                "username": "System",
+                "message": db_msg.message,
+                "message_type": db_msg.message_type,
+                "message_uuid": db_msg.message_uuid,
+                "is_pinned": db_msg.is_pinned,
+                "timestamp": db_msg.created_at.isoformat() + "Z"
+            }
+            
+            progress_payload = {
+                "event": "itinerary_progress_updated",
+                "trip_id": trip_id
+            }
+            return [ws_payload, progress_payload]
+            
+        return []
+
+    def _update_member_location_record(self, trip_id: int, user_id: int, latitude: float, longitude: float) -> Tuple[MemberLocation, Optional[float], Optional[float]]:
+        loc = self.db.query(MemberLocation).filter_by(trip_id=trip_id, user_id=user_id).first()
+        prev_lat = None
+        prev_lon = None
+        if not loc:
+            loc = MemberLocation(
+                trip_id=trip_id,
+                user_id=user_id,
+                latitude=latitude,
+                longitude=longitude,
+                is_sharing=True,
+                last_updated=datetime.utcnow()
+            )
+            self.db.add(loc)
+        else:
+            prev_lat = loc.latitude
+            prev_lon = loc.longitude
+            loc.latitude = latitude
+            loc.longitude = longitude
+            loc.last_updated = datetime.utcnow()
+        self.db.flush()
+        return loc, prev_lat, prev_lon
+
     def update_leader_location(self, trip_id: int, user_id: int, lat: float, lon: float) -> Tuple[LeaderLocation, List[dict]]:
         self.require_owner(trip_id, user_id)
         
         leader_loc = self.db.query(LeaderLocation).filter_by(trip_id=trip_id).first()
+        prev_lat = leader_loc.lat if leader_loc else None
+        prev_lon = leader_loc.lon if leader_loc else None
+        
         if not leader_loc:
             leader_loc = LeaderLocation(trip_id=trip_id, lat=lat, lon=lon)
             self.db.add(leader_loc)
@@ -604,17 +732,19 @@ class CollaborationService:
         self.db.flush()
         
         # Sync leader coordinates to member_locations table
-        self.update_member_location(trip_id, user_id, lat, lon)
+        self._update_member_location_record(trip_id, user_id, lat, lon)
+        
+        # Detect leader arrival/departure system chat message transitions
+        events_triggered = self._detect_arrival_transitions(trip_id, user_id, prev_lat, prev_lon, lat, lon)
         
         trip = self.repo.get_trip(trip_id)
         if not trip or not trip.daily_plans:
             self.db.commit()
-            return leader_loc, []
+            return leader_loc, events_triggered
             
-        events_triggered = []
         import math
         def get_dist(lat1, lon1, lat2, lon2):
-            return round(math.sqrt((lat1 - lat2) ** 2 + (lon1 - lon2) ** 2) * 111, 3)
+            return math.sqrt((lat1 - lat2) ** 2 + (lon1 - lon2) ** 2) * 111
             
         activities = []
         for day in (trip.daily_plans or []):
@@ -633,7 +763,8 @@ class CollaborationService:
             dist = get_dist(lat, lon, act["lat"], act["lon"])
             visit = self.db.query(TripVisit).filter_by(trip_id=trip_id, place_name=act["place_name"]).first()
             
-            if dist < 0.2:
+            # GPS hysteresis: Arrived within 150m (0.15 km), Left beyond 250m (0.25 km)
+            if dist < 0.15:
                 if not visit:
                     visit = TripVisit(trip_id=trip_id, place_name=act["place_name"], status="arrived", arrived_at=datetime.utcnow())
                     self.db.add(visit)
@@ -654,7 +785,7 @@ class CollaborationService:
                         "place_name": act["place_name"],
                         "trip_id": trip_id
                     })
-            elif dist > 0.5:
+            elif dist >= 0.25:
                 if visit and visit.status == "arrived":
                     visit.status = "left"
                     visit.left_at = datetime.utcnow()
@@ -679,28 +810,16 @@ class CollaborationService:
         self.db.commit()
         return leader_loc, events_triggered
 
-    def update_member_location(self, trip_id: int, user_id: int, latitude: float, longitude: float) -> MemberLocation:
+    def update_member_location(self, trip_id: int, user_id: int, latitude: float, longitude: float) -> Tuple[MemberLocation, List[dict]]:
         self.require_member(trip_id, user_id)
         
-        loc = self.db.query(MemberLocation).filter_by(trip_id=trip_id, user_id=user_id).first()
-        if not loc:
-            loc = MemberLocation(
-                trip_id=trip_id,
-                user_id=user_id,
-                latitude=latitude,
-                longitude=longitude,
-                is_sharing=True,
-                last_updated=datetime.utcnow()
-            )
-            self.db.add(loc)
-        else:
-            loc.latitude = latitude
-            loc.longitude = longitude
-            loc.last_updated = datetime.utcnow()
+        loc, prev_lat, prev_lon = self._update_member_location_record(trip_id, user_id, latitude, longitude)
+        
+        events_triggered = self._detect_arrival_transitions(trip_id, user_id, prev_lat, prev_lon, latitude, longitude)
         
         self.db.commit()
         self.db.refresh(loc)
-        return loc
+        return loc, events_triggered
 
     def toggle_sharing_status(self, trip_id: int, user_id: int, is_sharing: bool) -> MemberLocation:
         self.require_member(trip_id, user_id)

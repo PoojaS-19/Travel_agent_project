@@ -341,7 +341,9 @@ async def update_member_location(
         for event in events_triggered:
             await trip_ws_manager.broadcast(trip_id, event["event"], event)
     else:
-        service.update_member_location(trip_id, user_id, payload.latitude, payload.longitude)
+        loc, events_triggered = service.update_member_location(trip_id, user_id, payload.latitude, payload.longitude)
+        for event in events_triggered:
+            await trip_ws_manager.broadcast(trip_id, event["event"], event)
         
     all_locations = service.get_member_locations(trip_id)
     await trip_ws_manager.broadcast(trip_id, "member_locations_updated", {
