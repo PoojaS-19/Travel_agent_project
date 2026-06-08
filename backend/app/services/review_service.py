@@ -45,7 +45,7 @@ class ReviewService:
             func.count(PlaceReview.id).label('review_count'),
             func.avg(PlaceReview.lat).label('lat'),
             func.avg(PlaceReview.lon).label('lon'),
-            func.mode(PlaceReview.category).label('category')
+            func.max(PlaceReview.category).label('category')
         ).filter(
             PlaceReview.destination == destination
         ).group_by(

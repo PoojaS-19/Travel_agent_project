@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import API, { API_BASE_URL } from "../api";
 import "../App.css";
 import MapComponent from "../components/MapComponent";
 import { CITIES } from "../data/cities";
 import html2pdf from "html2pdf.js";
+import { 
+  Sparkles, MapPin, Calendar, FileText, Check, Copy, Download, 
+  Plus, X, Star, Navigation, Heart, ChevronLeft, ChevronRight, Info 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 // --- AUTOCOMPLETE COMPONENT ---
 function CityAutocomplete({ placeholder, value, onChange }) {
@@ -27,34 +32,37 @@ function CityAutocomplete({ placeholder, value, onChange }) {
   );
 
   return (
-    <div className="autocomplete-wrapper" ref={wrapperRef} style={{ width: "100%", marginBottom: "15px" }}>
-      <input
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setShowSuggestions(true);
-        }}
-        onFocus={() => setShowSuggestions(true)}
-        style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #ddd" }}
-      />
+    <div className="relative w-full" ref={wrapperRef}>
+      <div className="relative flex items-center">
+        <MapPin className="absolute left-3 w-5 h-5 text-brand-secondary" />
+        <input
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none transition-all text-sm"
+        />
+      </div>
       {showSuggestions && value.length > 0 && (
-        <div className="suggestions-dropdown">
+        <div className="absolute left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto">
           {filteredCities.length > 0 ? (
             filteredCities.map((c, i) => (
               <div
                 key={i}
-                className="suggestion-item"
+                className="px-4 py-3 hover:bg-slate-50 text-slate-700 hover:text-slate-900 cursor-pointer transition-colors text-sm font-semibold border-b border-slate-100 last:border-none"
                 onClick={() => {
                   onChange(c.name);
                   setShowSuggestions(false);
                 }}
               >
-                <div className="city-name">{c.name}</div>
+                {c.name}
               </div>
             ))
           ) : (
-            <div className="suggestion-item" style={{ cursor: "default" }}>
+            <div className="px-4 py-3 text-slate-400 text-sm cursor-default">
               No cities found
             </div>
           )}
@@ -71,12 +79,12 @@ const renderActivityIcon = (category) => {
     "Travel": "🚗",
     "Relax": "🏖️",
     "Shopping": "🛍️",
-    "History": "castle",
+    "History": "🏰",
   };
   const icon = icons[category] || "📍";
   return (
-    <div className="activity-icon-box">
-      <span className="activity-icon">{icon}</span>
+    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-xl shadow-sm shrink-0">
+      <span>{icon}</span>
     </div>
   );
 };
@@ -92,7 +100,6 @@ function ImageCarousel({ placeName, destination }) {
 
   const baseQuery = encodeURIComponent(placeName + " " + destination);
 
-  // Try to fetch image count on mount
   useEffect(() => {
     let cancelled = false;
     fetch(`${API_BASE_URL}/place-image-count?place=${baseQuery}`)
@@ -107,7 +114,6 @@ function ImageCarousel({ placeName, destination }) {
     return () => { cancelled = true; };
   }, [baseQuery]);
 
-  // Lock body scroll when lightbox is open
   useEffect(() => {
     if (lightboxOpen) {
       document.body.style.overflow = 'hidden';
@@ -117,7 +123,6 @@ function ImageCarousel({ placeName, destination }) {
     return () => { document.body.style.overflow = ''; };
   }, [lightboxOpen]);
 
-  // Close with ESC key
   useEffect(() => {
     if (!lightboxOpen) return;
     const handleKey = (e) => {
@@ -173,33 +178,47 @@ function ImageCarousel({ placeName, destination }) {
 
   const currentSrc = `${API_BASE_URL}/place-image?place=${baseQuery}&index=${currentIndex}`;
 
-  // Lightbox rendered via portal so it escapes overflow:hidden parents
   const lightboxPortal = lightboxOpen ? createPortal(
     <div
-      className={`image-lightbox-overlay ${lightboxClosing ? 'lightbox-closing' : ''}`}
+      className={`fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center z-[9999] transition-opacity duration-300 ${lightboxClosing ? 'opacity-0' : 'opacity-100'}`}
       onClick={closeLightbox}
     >
       <div
-        className={`image-lightbox-content ${lightboxClosing ? 'lightbox-content-closing' : ''}`}
+        className={`relative max-w-4xl w-full mx-4 flex flex-col items-center justify-center transition-all duration-300 ${lightboxClosing ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <button className="lightbox-close-btn" onClick={closeLightbox}>✕</button>
+        <button 
+          className="absolute top-4 right-4 p-2 bg-slate-900 border border-slate-800 text-white rounded-full hover:bg-slate-800 transition-colors" 
+          onClick={closeLightbox}
+        >
+          <X className="w-5 h-5" />
+        </button>
         <img
           src={currentSrc}
           alt={`${placeName} - Full View`}
-          className="lightbox-image"
+          className="max-h-[80vh] max-w-full rounded-2xl border border-slate-800 shadow-2xl object-contain"
         />
-        <p className="lightbox-caption">{placeName}</p>
+        <p className="mt-4 text-lg font-bold text-slate-100">{placeName}</p>
 
         {imageCount > 1 && (
           <>
-            <button className="lightbox-arrow lightbox-arrow-left" onClick={goPrev}>❮</button>
-            <button className="lightbox-arrow lightbox-arrow-right" onClick={goNext}>❯</button>
-            <div className="lightbox-dots">
+            <button 
+              className="absolute left-4 p-3 bg-slate-900/80 border border-slate-800/85 hover:bg-slate-800 text-white rounded-full transition-all" 
+              onClick={goPrev}
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button 
+              className="absolute right-4 p-3 bg-slate-900/80 border border-slate-800/85 hover:bg-slate-800 text-white rounded-full transition-all" 
+              onClick={goNext}
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+            <div className="flex gap-1.5 mt-4">
               {Array.from({ length: imageCount }).map((_, i) => (
                 <span
                   key={i}
-                  className={`carousel-dot lightbox-dot ${i === currentIndex ? "active" : ""}`}
+                  className={`w-2 h-2 rounded-full cursor-pointer transition-all ${i === currentIndex ? "bg-indigo-500 w-4" : "bg-slate-700 hover:bg-slate-600"}`}
                   onClick={(e) => { e.stopPropagation(); goTo(i); }}
                 />
               ))}
@@ -213,41 +232,43 @@ function ImageCarousel({ placeName, destination }) {
 
   return (
     <>
-      <div className="image-carousel-container">
-        {/* Main image — click to view full */}
-        <div className="carousel-image-wrapper" onClick={openLightbox} title="Click to view full image">
+      <div className="relative w-full h-48 md:h-60 rounded-xl overflow-hidden group shadow-sm border border-slate-200 mb-4 bg-slate-100">
+        {/* Main image */}
+        <div className="w-full h-full cursor-pointer relative" onClick={openLightbox} title="Click to view full image">
           <img
             src={currentSrc}
             alt={`${placeName} - Photo ${currentIndex + 1}`}
-            className="carousel-image"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             onError={() => handleImageError(currentIndex)}
           />
-          <div className="carousel-fullview-badge">
-            <span>🔍 View Full</span>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
+            <span className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 shadow">
+              🔍 View Full Image
+            </span>
           </div>
         </div>
 
         {imageCount > 1 && (
           <>
-            <button className="carousel-arrow carousel-arrow-left" onClick={goPrev} aria-label="Previous image">❮</button>
-            <button className="carousel-arrow carousel-arrow-right" onClick={goNext} aria-label="Next image">❯</button>
+            <button 
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300" 
+              onClick={goPrev} 
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button 
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300" 
+              onClick={goNext} 
+              aria-label="Next image"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </>
         )}
 
         {imageCount > 1 && (
-          <div className="carousel-dots">
-            {Array.from({ length: imageCount }).map((_, i) => (
-              <span
-                key={i}
-                className={`carousel-dot ${i === currentIndex ? "active" : ""}`}
-                onClick={(e) => { e.stopPropagation(); goTo(i); }}
-              />
-            ))}
-          </div>
-        )}
-
-        {imageCount > 1 && (
-          <div className="carousel-counter">
+          <div className="absolute bottom-3 right-3 px-2 py-1 bg-slate-900/90 border border-slate-800/80 rounded-md text-[10px] font-bold text-slate-300">
             {currentIndex + 1} / {imageCount}
           </div>
         )}
@@ -293,14 +314,14 @@ function ReviewForm({ place, destination, onClose }) {
   };
 
   return (
-    <div className="review-form">
-      <div className="form-group">
-        <label>Rating:</label>
-        <div className="rating-input">
+    <div className="space-y-4">
+      <div className="space-y-1.5 text-left">
+        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Rating</label>
+        <div className="flex gap-2">
           {[1, 2, 3, 4, 5].map(star => (
             <span
               key={star}
-              className={`star ${rating >= star ? 'active' : ''}`}
+              className={`text-2xl cursor-pointer transition-transform hover:scale-110 ${rating >= star ? 'opacity-100' : 'opacity-30'}`}
               onClick={() => setRating(star)}
             >
               ⭐
@@ -309,43 +330,63 @@ function ReviewForm({ place, destination, onClose }) {
         </div>
       </div>
 
-      <div className="form-group">
-        <label>Review (optional):</label>
+      <div className="space-y-1.5 text-left">
+        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Review (optional)</label>
         <textarea
           value={review}
           onChange={(e) => setReview(e.target.value)}
           placeholder="Share your experience..."
           rows={3}
+          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-1 focus:ring-brand-secondary outline-none"
         />
       </div>
 
-      <div className="form-group">
-        <label>Trip Type:</label>
-        <select value={tripType} onChange={(e) => setTripType(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="solo">Solo</option>
-          <option value="friends">Friends</option>
-          <option value="family">Family</option>
-          <option value="couple">Couple</option>
-          <option value="business">Business</option>
-        </select>
+      <div className="grid grid-cols-2 gap-4 text-left">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trip Type</label>
+          <select 
+            value={tripType} 
+            onChange={(e) => setTripType(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-1 focus:ring-brand-secondary outline-none"
+          >
+            <option value="">Select...</option>
+            <option value="solo">Solo</option>
+            <option value="friends">Friends</option>
+            <option value="family">Family</option>
+            <option value="couple">Couple</option>
+            <option value="business">Business</option>
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Mood</label>
+          <select 
+            value={mood} 
+            onChange={(e) => setMood(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-1 focus:ring-brand-secondary outline-none"
+          >
+            <option value="">Select...</option>
+            <option value="chill">Chill</option>
+            <option value="adventure">Adventure</option>
+            <option value="cultural">Cultural</option>
+            <option value="romantic">Romantic</option>
+            <option value="exciting">Exciting</option>
+          </select>
+        </div>
       </div>
 
-      <div className="form-group">
-        <label>Mood:</label>
-        <select value={mood} onChange={(e) => setMood(e.target.value)}>
-          <option value="">Select...</option>
-          <option value="chill">Chill</option>
-          <option value="adventure">Adventure</option>
-          <option value="cultural">Cultural</option>
-          <option value="romantic">Romantic</option>
-          <option value="exciting">Exciting</option>
-        </select>
-      </div>
-
-      <div className="modal-actions">
-        <button onClick={onClose} className="cancel-btn">Cancel</button>
-        <button onClick={submitReview} disabled={loading} className="submit-btn">
+      <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+        <button 
+          onClick={onClose} 
+          className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={submitReview} 
+          disabled={loading} 
+          className="px-4 py-2 bg-brand-accent hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold border-none cursor-pointer"
+        >
           {loading ? "Submitting..." : "Submit Review"}
         </button>
       </div>
@@ -354,8 +395,8 @@ function ReviewForm({ place, destination, onClose }) {
 }
 
 export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
-
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [savedTripId, setSavedTripId] = useState(null);
   const [isFinalized, setIsFinalized] = useState(false);
   const [followers, setFollowers] = useState([
@@ -363,12 +404,18 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   ]);
 
   const [form, setForm] = useState({
-    start_city: "",
-    destination: "",
-    days: "",
-    theme: "",
-    preferences: "",
+    start_city: searchParams.get("start_city") || "",
+    destination: searchParams.get("destination") || "",
+    days: searchParams.get("days") || "",
+    theme: searchParams.get("theme") || "",
+    preferences: searchParams.get("preferences") || "",
   });
+
+  useEffect(() => {
+    if (form.destination && form.days) {
+      submit();
+    }
+  }, []);
 
   const [result, setResult] = useState("");
   const [dailyPlans, setDailyPlans] = useState([]);
@@ -410,11 +457,14 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       });
 
       const data = res.data;
-      if (data.daily_plans) {
+      if (data.error) {
+        setResult(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+      } else if (data.daily_plans) {
         setResult(data.itinerary_text);
         setDailyPlans(data.daily_plans);
       } else {
-        setResult(data.itinerary || data);
+        const fallback = data.itinerary || data;
+        setResult(typeof fallback === "string" ? fallback : JSON.stringify(fallback));
       }
 
       if (data.id) {
@@ -422,6 +472,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       } else {
         setSavedTripId(null);
       }
+      setSearchParams({
+        start_city: form.start_city,
+        destination: form.destination,
+        days: form.days,
+        theme: form.theme,
+        preferences: form.preferences
+      });
       setIsFinalized(false);
 
       // Fetch personalized recommendations
@@ -435,7 +492,7 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
 
       // Fetch community suggestions
       try {
-        const commRes = await API.post("/api/community-recommendations", {
+        const commRes = await API.post("/api/reviews/community-recommendations", {
           destination: form.destination,
           theme: form.theme,
           preferences: form.preferences
@@ -457,7 +514,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     alert("Copied!");
   };
 
-  // Build a Google Maps route URL for a day's activities
   const buildGoogleMapsUrl = (activities) => {
     const valid = activities.filter(a => a.lat && a.lon && !isNaN(a.lat) && !isNaN(a.lon));
     if (valid.length === 0) return null;
@@ -472,7 +528,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     return url;
   };
 
-  // Build an OpenStreetMap static image URL covering all points
   const buildStaticMapImg = (activities, width = 800, height = 350) => {
     const valid = activities.filter(a => a.lat && a.lon && !isNaN(a.lat) && !isNaN(a.lon));
     if (valid.length === 0) return null;
@@ -483,9 +538,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     const minLon = Math.min(...lons) - 0.02;
     const maxLon = Math.max(...lons) + 0.02;
     const bbox   = `${minLon},${minLat},${maxLon},${maxLat}`;
-    // Use OpenStreetMap Static Map via a free proxy (geoapify) — fallback to a plain labelled banner
-    const markers = valid.map((a, i) => `lonlat:${a.lon},${a.lat};color:%23e74c3c;size:medium;text:${i+1}`).join('|');
-    // Use Geoapify free static maps (no key needed for low-res)
     return `https://staticmap.openstreetmap.de/staticmap.php?bbox=${bbox}&size=${width}x${height}&maptype=mapnik&markers=${valid.map((a,i)=>`${a.lat},${a.lon},ol-marker-red`).join('|')}`;
   };
 
@@ -493,28 +545,22 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     const element = printRef.current;
     if (!element) return;
 
-    // ── Step 1: Find all map containers and swap them for clickable static images ──
     const mapContainers = element.querySelectorAll('.leaflet-container');
-    const restorations  = []; // [{parent, placeholder, original}]
+    const restorations  = [];
 
-    // Gather all day activities for building per-day URLs
     const allActivitiesForDays = dailyPlans;
 
     mapContainers.forEach((mapEl, idx) => {
       const parent = mapEl.parentElement;
 
-      // Figure out which activities belong to this map
-      // Master map (idx===0 when allDailyPlans) has all; day maps match by index
       let activities = [];
       let googleUrl  = "";
       let label      = "";
 
       if (idx === 0 && element.querySelector('.master-map-container')?.contains(mapEl)) {
-        // Master map: link to first day route as overview
         activities = allActivitiesForDays.flatMap(d => d.activities);
         label = "🗺️ View Full Trip on Google Maps";
       } else {
-        // Per-day map — figure out which day by counting day-map-containers
         const allDayMaps = [...element.querySelectorAll('.day-map-container .leaflet-container')];
         const dayIdx     = allDayMaps.indexOf(mapEl);
         if (dayIdx >= 0 && allActivitiesForDays[dayIdx]) {
@@ -529,16 +575,15 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       googleUrl = buildGoogleMapsUrl(activities) || "https://maps.google.com";
       const imgSrc = buildStaticMapImg(activities);
 
-      // Build placeholder: a clickable banner with the map image (or fallback div)
       const placeholder = document.createElement('div');
       placeholder.style.cssText = `
         width: 100%;
-        background: #f0f4f8;
-        border-radius: 10px;
+        background: #0f172a;
+        border-radius: 12px;
         overflow: hidden;
-        border: 2px solid #3b82f6;
+        border: 1px solid #1e293b;
         margin-bottom: 15px;
-        font-family: Arial, sans-serif;
+        font-family: inherit;
       `;
       placeholder.innerHTML = `
         <a href="${googleUrl}" target="_blank" rel="noopener noreferrer"
@@ -547,22 +592,18 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
             imgSrc
               ? `<img src="${imgSrc}" alt="Map" crossorigin="anonymous"
                       style="width:100%; height:300px; object-fit:cover; display:block;" />`
-              : `<div style="height:160px; background: linear-gradient(135deg,#1e3a5f,#3b82f6);
+              : `<div style="height:160px; background: linear-gradient(135deg,#0f172a,#1e1b4b);
                              display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">
                    🗺️ Map Preview
                  </div>`
           }
           <div style="
             padding: 14px 20px;
-            background: #3b82f6;
+            background: #6366f1;
             color: white;
             font-size: 15px;
             font-weight: 600;
             text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
           ">
             ${label} ↗
           </div>
@@ -574,7 +615,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       restorations.push({ parent, placeholder, original: mapEl });
     });
 
-    // ── Step 2: Generate PDF with links enabled ──
     const opt = {
       margin:      10,
       filename:    `${form.destination || 'trip'}-itinerary.pdf`,
@@ -586,7 +626,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
 
     await html2pdf().set(opt).from(element).save();
 
-    // ── Step 3: Restore original maps ──
     restorations.forEach(({ parent, placeholder, original }) => {
       parent.insertBefore(original, placeholder);
       parent.removeChild(placeholder);
@@ -753,7 +792,6 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     const updatedPlans = [...dailyPlans];
     const firstDay = updatedPlans[0];
 
-    // Create activity from suggestion
     const newActivity = {
       time: "Flexible",
       place_name: suggestion.place_name,
@@ -763,256 +801,309 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       lon: suggestion.lon
     };
 
-    // Add to first day's activities
     firstDay.activities = [...firstDay.activities, newActivity];
     setDailyPlans(updatedPlans);
-
-    // Remove from suggestions
     setCommunitySuggestions(prev => prev.filter(s => s.place_name !== suggestion.place_name));
-
     alert(`${suggestion.place_name} added to your itinerary!`);
   };
 
   return (
-    <div className="itinerary-page">
-
-      <h2 className="page-title">AI Travel Itinerary Planner</h2>
-
-      {/* SAVED ITINERARIES TOGGLE */}
-      <div className="saved-itineraries-toggle">
-        <button onClick={fetchSavedItineraries} className="saved-btn">
+    <div className="relative min-h-screen px-4 py-8 md:px-12 md:py-12 max-w-7xl mx-auto space-y-8">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-[#0a2240] flex items-center gap-2">
+            <Sparkles className="w-8 h-8 text-brand-secondary animate-pulse" />
+            AI Itinerary Planner
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5">Generate structured, daily travel schedules cached on maps</p>
+        </div>
+        <button 
+          onClick={fetchSavedItineraries} 
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-all duration-200 shadow-sm cursor-pointer"
+        >
           📁 View Saved Itineraries
         </button>
       </div>
 
-      {/* SAVED ITINERARIES LIST */}
-      {showSaved && (
-        <div className="saved-itineraries-section">
-          <h3>Your Saved Itineraries</h3>
-          {savedItineraries.length === 0 ? (
-            <p>No saved itineraries yet. Generate and save some plans!</p>
-          ) : (
-            <div className="saved-itineraries-grid">
-              {savedItineraries.map((itinerary) => (
-                <div key={itinerary.id} className="saved-itinerary-card">
-                  <h4>{itinerary.destination}</h4>
-                  <p><strong>From:</strong> {itinerary.start_city}</p>
-                  <p><strong>Created:</strong> {new Date(itinerary.created_at).toLocaleDateString()}</p>
-                  <p className="saved-itinerary-preview">
-                    {itinerary.itinerary_text.substring(0, 150)}...
-                  </p>
-                  <button 
-                    onClick={() => loadSavedItinerary(itinerary)}
-                    className="load-saved-btn"
-                  >
-                    Load This Plan
-                  </button>
-                </div>
-              ))}
+      {/* SAVED ITINERARIES SLIDE PANEL */}
+      <AnimatePresence>
+        {showSaved && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="w-full bg-white border border-slate-200 rounded-2xl p-6 shadow-md relative overflow-hidden"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-slate-900">Your Saved Itineraries</h3>
+              <button 
+                onClick={() => setShowSaved(false)}
+                className="p-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          )}
-          <button onClick={() => setShowSaved(false)} className="close-saved-btn">
-            Close
-          </button>
-        </div>
-      )}
+            {savedItineraries.length === 0 ? (
+              <p className="text-sm text-slate-500">No saved itineraries yet. Plan and save some trips!</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {savedItineraries.map((itinerary) => (
+                  <div key={itinerary.id} className="bg-slate-50 border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-all flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900 mb-1">{itinerary.destination}</h4>
+                      <p className="text-xs text-slate-600"><strong>From:</strong> {itinerary.start_city}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5"><strong>Created:</strong> {new Date(itinerary.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-slate-500 mt-3 line-clamp-3 leading-relaxed">
+                        {itinerary.itinerary_text}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => loadSavedItinerary(itinerary)}
+                      className="w-full mt-4 py-2 bg-sky-50 hover:bg-sky-100 text-brand-secondary rounded-lg text-xs font-bold border border-sky-200 transition-all cursor-pointer"
+                    >
+                      Load This Plan
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* FORM */}
-      <div className="itinerary-form">
-        <CityAutocomplete
-          placeholder="Starting City (e.g. Mumbai)"
-          value={form.start_city}
-          onChange={(val) => setForm({ ...form, start_city: val })}
-        />
-        <CityAutocomplete
-          placeholder="Destination (e.g. Paris)"
-          value={form.destination}
-          onChange={(val) => setForm({ ...form, destination: val })}
-        />
-        <div className="row">
-          <input
-            type="number"
-            placeholder="Days"
-            value={form.days}
-            onChange={(e) => setForm({ ...form, days: e.target.value })}
+      {/* INPUT FORM PANEL */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-brand-secondary via-brand-secondary to-brand-accent" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CityAutocomplete
+            placeholder="Starting City (e.g. Mumbai)"
+            value={form.start_city}
+            onChange={(val) => setForm({ ...form, start_city: val })}
           />
+          <CityAutocomplete
+            placeholder="Destination (e.g. Paris)"
+            value={form.destination}
+            onChange={(val) => setForm({ ...form, destination: val })}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative flex items-center">
+            <Calendar className="absolute left-3 w-5 h-5 text-brand-secondary" />
+            <input
+              type="number"
+              placeholder="Duration in Days"
+              value={form.days}
+              onChange={(e) => setForm({ ...form, days: e.target.value })}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
+            />
+          </div>
           <input
-            placeholder="Theme"
+            placeholder="Theme (e.g. Adventure, Relax, Heritage)"
             value={form.theme}
             onChange={(e) => setForm({ ...form, theme: e.target.value })}
+            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
           />
         </div>
+
         <textarea
-          placeholder="Preferences"
+          placeholder="Additional Preferences (e.g. Vegetarian diet, low walking intensity, museums first)"
           value={form.preferences}
           onChange={(e) => setForm({ ...form, preferences: e.target.value })}
+          rows={3}
+          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
         />
-        <button onClick={submit}>
-          {loading ? "Generating..." : "Generate Itinerary"}
+
+        <button 
+          onClick={submit}
+          disabled={loading}
+          className="w-full py-4 bg-brand-accent hover:bg-orange-600 text-white font-black rounded-xl shadow-md disabled:opacity-50 transition-all text-sm uppercase tracking-wider border-none cursor-pointer"
+        >
+          {loading ? "Generating Smart Itinerary..." : "Generate AI Itinerary"}
         </button>
       </div>
 
-      {/* ACTIONS */}
+      {/* QUICK ACTIONS BUTTONS */}
       {result && (
-        <div className="result-actions" style={{ display: "flex", gap: "10px", justifyContent: "center", margin: "20px 0", flexWrap: "wrap" }}>
-          <button onClick={copyToClipboard} className="saved-trip-secondary-btn">Copy</button>
-          <button onClick={downloadPDF} className="saved-trip-secondary-btn">Download PDF</button>
+        <div className="flex justify-center gap-3 flex-wrap">
+          <button 
+            onClick={copyToClipboard} 
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all duration-200"
+          >
+            <Copy className="w-4 h-4 text-brand-secondary" />
+            Copy Text
+          </button>
+          <button 
+            onClick={downloadPDF} 
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all duration-200"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            Download PDF
+          </button>
           {savedTripId && (
             <>
-              <button onClick={handleEditItinerary} className="saved-trip-primary-btn">Edit Itinerary</button>
-              <button onClick={handleFinalizeItinerary} className="saved-trip-primary-btn" style={{ background: "#10b981" }}>Finalize It</button>
+              <button 
+                onClick={handleEditItinerary} 
+                className="flex items-center gap-2 px-5 py-2.5 bg-brand-secondary hover:bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-200 border-none cursor-pointer"
+              >
+                <Navigation className="w-4 h-4" />
+                Collaborative Dashboard
+              </button>
+              <button 
+                onClick={handleFinalizeItinerary} 
+                className="flex items-center gap-2 px-5 py-2.5 bg-brand-accent hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-200 border-none cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add Travel Buddies
+              </button>
             </>
           )}
         </div>
       )}
 
-      {isFinalized && savedTripId && (
-        <div className="link-follower-card" style={{
-          maxWidth: "650px",
-          margin: "20px auto",
-          background: "rgba(255, 255, 255, 0.95)",
-          padding: "25px",
-          borderRadius: "16px",
-          boxShadow: "0 6px 30px rgba(0, 0, 0, 0.15)",
-          border: "1px solid #e2e8f0"
-        }}>
-          <h3 style={{ marginTop: 0, color: "#1e293b", fontSize: "20px", fontWeight: "600", marginBottom: "10px", textAlign: "center" }}>Link Follower (Optional)</h3>
-          <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px", textAlign: "center" }}>
-            Add travel buddies to your trip. They will be linked as followers. Send the invite code to their email, enter the code below to verify them, and click **Done** when finished.
-          </p>
+      {/* LINK FOLLOWERS CARD PANEL */}
+      <AnimatePresence>
+        {isFinalized && savedTripId && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="max-w-2xl mx-auto bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-emerald-500" />
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                👥 Add Travel Buddies
+              </h3>
+              <button 
+                onClick={() => setIsFinalized(false)}
+                className="p-1 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 hover:text-slate-850"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-500 mb-6">
+              Invite friends to view your itinerary. Fill in their email to send an invite, enter the 6-digit OTP code received, and click verify.
+            </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginBottom: "20px" }}>
-            {followers.map((follower, index) => (
-              <div key={index} style={{
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: "12px",
-                padding: "16px",
-                position: "relative"
-              }}>
-                <h4 style={{ margin: "0 0 10px 0", fontSize: "15px", color: "#334155" }}>Buddy #{index + 1}</h4>
-                
-                {/* Email Input row */}
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <input
-                    type="email"
-                    placeholder="Follower's Email Address"
-                    value={follower.email}
-                    onChange={(e) => handleFollowerEmailChange(index, e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: "10px",
-                      borderRadius: "8px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "14px"
-                    }}
-                    disabled={follower.invited}
-                    required
-                  />
-                  {!follower.invited && (
-                    <button
-                      type="button"
-                      disabled={follower.loadingInvite}
-                      onClick={() => handleSendInvite(index)}
-                      className="saved-trip-primary-btn"
-                      style={{ padding: "10px 18px", fontSize: "13px" }}
-                    >
-                      {follower.loadingInvite ? "Sending..." : "Send Invite"}
-                    </button>
+            <div className="space-y-4 mb-6">
+              {followers.map((follower, index) => (
+                <div key={index} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Buddy #{index + 1}</h4>
+                  
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <input
+                      type="email"
+                      placeholder="Buddy's Email Address"
+                      value={follower.email}
+                      onChange={(e) => handleFollowerEmailChange(index, e.target.value)}
+                      disabled={follower.invited}
+                      className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:ring-1 focus:ring-brand-secondary outline-none"
+                      required
+                    />
+                    {!follower.invited && (
+                      <button
+                        type="button"
+                        disabled={follower.loadingInvite}
+                        onClick={() => handleSendInvite(index)}
+                        className="px-4 py-2 bg-brand-secondary hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 border-none cursor-pointer"
+                      >
+                        {follower.loadingInvite ? "Sending..." : "Send Invite Code"}
+                      </button>
+                    )}
+                  </div>
+
+                  {follower.invited && !follower.verified && (
+                    <div className="flex gap-3 items-center">
+                      <input
+                        type="text"
+                        placeholder="6-digit code"
+                        maxLength={6}
+                        value={follower.otp}
+                        onChange={(e) => handleFollowerOtpChange(index, e.target.value.replace(/\D/g, ""))}
+                        className="w-32 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm tracking-widest text-center focus:ring-1 focus:ring-brand-secondary outline-none"
+                        disabled={follower.loadingVerify}
+                      />
+                      <button
+                        type="button"
+                        disabled={follower.loadingVerify}
+                        onClick={() => handleVerifyOtp(index)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all border-none cursor-pointer"
+                      >
+                        {follower.loadingVerify ? "Verifying..." : "Verify Code"}
+                      </button>
+                    </div>
+                  )}
+
+                  {follower.message && (
+                    <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      {follower.message}
+                    </div>
+                  )}
+                  {follower.error && (
+                    <div className="text-xs text-rose-600 font-semibold flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5" />
+                      {follower.error}
+                    </div>
                   )}
                 </div>
+              ))}
+            </div>
 
-                {/* Verification Row (only visible if invited and not verified) */}
-                {follower.invited && !follower.verified && (
-                  <div style={{ marginTop: "12px", display: "flex", gap: "10px", alignItems: "center" }}>
-                    <input
-                      type="text"
-                      placeholder="6-digit OTP Code"
-                      maxLength={6}
-                      value={follower.otp}
-                      onChange={(e) => handleFollowerOtpChange(index, e.target.value.replace(/\D/g, ""))}
-                      style={{
-                        width: "140px",
-                        padding: "10px",
-                        borderRadius: "8px",
-                        border: "1px solid #cbd5e1",
-                        fontSize: "14px"
-                      }}
-                      disabled={follower.loadingVerify}
-                    />
-                    <button
-                      type="button"
-                      disabled={follower.loadingVerify}
-                      onClick={() => handleVerifyOtp(index)}
-                      className="saved-trip-primary-btn"
-                      style={{ padding: "10px 18px", fontSize: "13px", background: "#10b981" }}
-                    >
-                      {follower.loadingVerify ? "Verifying..." : "Verify Code"}
-                    </button>
-                  </div>
-                )}
+            <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={addFollowerField}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                + Add Another Buddy
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleDoneFinalizing}
+                className="px-5 py-2.5 bg-brand-secondary hover:bg-blue-600 text-white rounded-xl text-xs font-bold border-none cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-                {/* Status / Success Messages */}
-                {follower.message && (
-                  <div style={{ marginTop: "10px", color: "#16a34a", fontSize: "13px", fontWeight: "500" }}>
-                    ✓ {follower.message}
-                  </div>
-                )}
-                {follower.error && (
-                  <div style={{ marginTop: "10px", color: "#dc2626", fontSize: "13px", fontWeight: "500" }}>
-                    ⚠ {follower.error}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={addFollowerField}
-              className="saved-trip-secondary-btn"
-              style={{ padding: "10px 18px" }}
-            >
-              + Add More Buddy
-            </button>
-            
-            <button
-              type="button"
-              onClick={handleDoneFinalizing}
-              className="saved-trip-primary-btn"
-              style={{ padding: "10px 24px", background: "#4f46e5" }}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* RECOMMENDATIONS */}
+      {/* RECOMMENDATIONS & PERSONALIZATION */}
       {recommendations.length > 0 && (
-        <div className="recommendations-section">
-          <h3>Recommended for You</h3>
-          <p>Based on your travel history, here are some personalized suggestions:</p>
-          <div className="recommendations-grid">
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span>✨</span> Recommended for You
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {recommendations.map((rec, index) => (
-              <div key={index} className="recommendation-card">
-                <h4>{rec.title}</h4>
-                <p><strong>Destination:</strong> {rec.destination}</p>
-                <p><strong>Theme:</strong> {rec.theme}</p>
-                <p><strong>Duration:</strong> {rec.suggested_duration}</p>
-                <p className="recommendation-reason">{rec.reason}</p>
+              <div key={index} className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-5 flex flex-col justify-between shadow-sm transition-all">
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">{rec.title}</h4>
+                  <div className="flex gap-2 flex-wrap my-2">
+                    <span className="text-[10px] bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-brand-secondary font-bold">{rec.theme}</span>
+                    <span className="text-[10px] bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-emerald-600 font-bold">{rec.suggested_duration}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-bold mb-1">Destination: {rec.destination}</p>
+                  <p className="text-xs text-slate-500 leading-relaxed italic mt-2">{rec.reason}</p>
+                </div>
                 <button 
                   onClick={() => {
                     setForm({
                       ...form,
                       destination: rec.destination,
                       theme: rec.theme,
-                      days: rec.suggested_duration.split('-')[0].trim() // e.g., "3" from "3-5 days"
+                      days: rec.suggested_duration.split('-')[0].trim()
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="try-recommendation-btn"
+                  className="w-full mt-4 py-2 bg-sky-50 hover:bg-sky-100 text-brand-secondary rounded-lg text-xs font-bold border border-sky-200 transition-all cursor-pointer border-none"
                 >
                   Try This Itinerary
                 </button>
@@ -1022,24 +1113,28 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
         </div>
       )}
 
-      {/* COMMUNITY SUGGESTIONS */}
+      {/* COMMUNITY EXPERIENCE CARD ROW */}
       {communitySuggestions.length > 0 && (
-        <div className="recommendations-section">
-          <h3>Suggested Nearby Experiences</h3>
-          <p>Community-rated places near your destination:</p>
-          <div className="recommendations-grid">
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span>🌟</span> Suggested Nearby Experiences
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {communitySuggestions.map((suggestion, index) => (
-              <div key={index} className="recommendation-card">
-                <h4>{suggestion.place_name}</h4>
-                <div className="rating-display">
-                  <span className="stars">⭐</span>
-                  <span>{suggestion.rating}</span>
+              <div key={index} className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-5 flex flex-col justify-between shadow-sm transition-all">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <h4 className="text-base font-bold text-slate-900">{suggestion.place_name}</h4>
+                    <span className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-2 py-0.5 rounded-md">
+                      ⭐ {suggestion.rating}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed my-3">{suggestion.reason}</p>
+                  <p className="text-[11px] text-slate-400 font-bold">Distance: {suggestion.distance}</p>
                 </div>
-                <p className="recommendation-reason">{suggestion.reason}</p>
-                <p><strong>Distance:</strong> {suggestion.distance}</p>
                 <button 
                   onClick={() => addToItinerary(suggestion)}
-                  className="try-recommendation-btn"
+                  className="w-full mt-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold border border-emerald-200 transition-all cursor-pointer border-none"
                 >
                   Add To Itinerary
                 </button>
@@ -1049,128 +1144,196 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
         </div>
       )}
 
-      {/* OUTPUT BOARD */}
-      <div className="output-section">
-        <div className="output-board" ref={printRef}>
-          {result && dailyPlans.length > 0 ? (
-            <>
-              {/* MASTER MAP */}
-              <div className="master-map-container" style={{marginBottom: "30px"}}>
-                <MapComponent allDailyPlans={dailyPlans} />
-              </div>
+      {/* OUTPUT TIMELINE BOARD */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm" ref={printRef}>
+        {result && dailyPlans.length > 0 ? (
+          <div className="p-6 md:p-8 space-y-8">
+            {/* MASTER MAP OVERVIEW */}
+            <div className="master-map-container rounded-xl overflow-hidden border border-slate-200">
+              <MapComponent allDailyPlans={dailyPlans} />
+            </div>
 
-              <div className="itinerary-timeline">
+            <div className="space-y-12">
               {dailyPlans.map((dayPlan, index) => (
-                <div key={index} className="day-section">
-                  <h3 className="day-header">Day {dayPlan.day}</h3>
+                <div key={index} className="space-y-6">
+                  {/* Day Banner */}
+                  <div className="relative flex items-center gap-4 py-2 border-b border-slate-200">
+                    <span className="text-xs font-extrabold px-3 py-1 bg-sky-50 text-brand-secondary rounded-lg border border-sky-100 uppercase tracking-widest">
+                      Day {dayPlan.day}
+                    </span>
+                    {dayPlan.date && (
+                      <span className="text-xs text-slate-500 font-semibold">
+                        {new Date(dayPlan.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
 
-                  <div className="activities-list">
+                  {/* Day Activities List */}
+                  <div className="relative border-l-2 border-slate-200 ml-4 pl-6 md:pl-8 space-y-8">
                     {dayPlan.activities.map((activity, actIndex) => (
-                      <div key={actIndex} className="activity-card">
+                      <div key={actIndex} className="relative group">
+                        {/* Circular connector on line */}
+                        <div className="absolute -left-[31px] md:-left-[39px] top-1.5 w-4 h-4 bg-white border-2 border-brand-secondary rounded-full group-hover:bg-brand-secondary transition-colors" />
 
-                        <div className="activity-time-col">
-                          <span className="activity-time">{activity.time}</span>
-                          <div className="time-connector"></div>
-                        </div>
-
-                        <div className="activity-content">
-                          {/* IMAGE CAROUSEL — shows 2-3 images with full view */}
+                        <div className="bg-slate-50 border border-slate-200 group-hover:border-slate-300 rounded-2xl p-5 md:p-6 transition-all shadow-sm text-left">
+                          {/* Image Carousel */}
                           <ImageCarousel
                             placeName={activity.place_name}
                             destination={form.destination}
                           />
 
-                          <div className="activity-header">
-                            {renderActivityIcon(activity.category)}
-                            <h4>{activity.place_name}</h4>
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              {renderActivityIcon(activity.category)}
+                              <div>
+                                <h4 className="text-base font-bold text-slate-900">{activity.place_name}</h4>
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{activity.time || "Flexible"}</span>
+                              </div>
+                            </div>
+                            {activity.cost && (
+                              <span className="self-start md:self-auto text-xs px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-bold">
+                                {activity.cost}
+                              </span>
+                            )}
                           </div>
 
-                          <p className="activity-description">{activity.description}</p>
+                          <p className="text-sm text-slate-600 leading-relaxed mt-4">{activity.description}</p>
 
                           {activity.alternatives && activity.alternatives.length > 0 && (
-                            <div className="activity-alternatives">
-                              <span className="alt-label">Alternatives:</span>
+                            <div className="mt-4 flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-slate-500 font-semibold">Alternatives:</span>
                               {activity.alternatives.map((alt, altIdx) => (
-                                <span key={altIdx} className="alt-chip clickable-chip" onClick={() => handleAltClick(alt)}>{alt}</span>
+                                <span 
+                                  key={altIdx} 
+                                  className="text-[11px] font-semibold px-2.5 py-1 bg-sky-50 border border-sky-150 hover:bg-sky-100 text-brand-secondary rounded-lg cursor-pointer transition-all"
+                                  onClick={() => handleAltClick(alt)}
+                                >
+                                  {alt}
+                                </span>
                               ))}
                             </div>
                           )}
 
-                          <div className="activity-footer">
-                            {activity.cost && <span className="activity-cost">{activity.cost}</span>}
+                          <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-200">
                             <button
                               onClick={() => setReviewModal({ isOpen: true, place: activity })}
-                              className="rate-place-btn"
+                              className="flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-800 font-bold px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all cursor-pointer border-none"
                             >
-                              ⭐ Rate This Place
+                              ⭐ Rate Place
                             </button>
                             <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${activity.lat},${activity.lon}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="book-tour-btn"
+                              className="flex items-center gap-1.5 text-xs text-brand-secondary hover:text-blue-600 font-bold px-3 py-2 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all"
                             >
-                              <i className="fas fa-location-arrow"></i> Navigate
+                              <Navigation className="w-3.5 h-3.5 text-brand-secondary" />
+                              Directions
                             </a>
                           </div>
                         </div>
-
                       </div>
                     ))}
                   </div>
 
-                  {/* Map for this day */}
-                  <div className="day-map-container">
+                  {/* Day map */}
+                  <div className="day-map-container rounded-xl overflow-hidden border border-slate-200 shadow-sm mt-4">
                     <MapComponent activities={dayPlan.activities} />
                   </div>
-
                 </div>
               ))}
             </div>
-            </>
-          ) : (
-            <div className="empty-state">
-              {result ? <pre className="output-text">{result}</pre> : "Your generated itinerary will appear here."}
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+            {result ? (
+              <pre className="text-left w-full overflow-x-auto whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed bg-slate-50 p-6 rounded-xl border border-slate-200">
+                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+              </pre>
+            ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-4">
+            <span className="text-5xl">🗺️</span>
+            <p className="text-sm font-semibold">Your itinerary timeline will render here. Fill in the details above to begin.</p>
+          </div>
+        )}
+      </div>
+        )}
       </div>
 
-      {altModal.isOpen && (
-        <div className="alt-modal-overlay" onClick={() => setAltModal({ ...altModal, isOpen: false })}>
-          <div className="alt-modal-content" onClick={e => e.stopPropagation()}>
-            <button className="alt-close-btn" onClick={() => setAltModal({ ...altModal, isOpen: false })}>✖</button>
-            <h3>{altModal.place}</h3>
-            {altModal.loading ? (
-              <p>Fetching AI insights...</p>
-            ) : (
-              <div>
-                <p style={{ lineHeight: 1.5, color: "#444" }}>{altModal.text}</p>
-                <div style={{ marginTop: "20px" }}>
-                   <p style={{ fontSize: "12px", color: "#888", fontStyle: "italic", marginBottom: "10px" }}>Like this place? Open the chatbot and ask to swap it in!</p>
-                   <button className="alt-modal-action-btn" onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(altModal.place + " " + (form.destination || form.start_city))}`, '_blank')}>
-                     Search Web
-                   </button>
+      {/* ALTERNATIVE DETAILS DIALOG MODAL */}
+      <AnimatePresence>
+        {altModal.isOpen && (
+          <div 
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[999] px-4"
+            onClick={() => setAltModal({ ...altModal, isOpen: false })}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 max-w-lg w-full relative shadow-2xl text-slate-900"
+              onClick={e => e.stopPropagation()}
+            >
+              <button 
+                className="absolute top-4 right-4 p-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-950 transition-colors cursor-pointer border-none" 
+                onClick={() => setAltModal({ ...altModal, isOpen: false })}
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <h3 className="text-xl font-bold text-slate-900 mb-4">{altModal.place}</h3>
+              {altModal.loading ? (
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
+                  <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-indigo-400 font-semibold">Fetching AI insights...</p>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600 leading-relaxed">{altModal.text}</p>
+                  <div className="pt-4 border-t border-slate-200 space-y-4">
+                     <p className="text-xs text-slate-500 italic">Like this place? Ask your AI floating assistant to swap it into the itinerary!</p>
+                     <button 
+                       className="w-full py-2.5 bg-brand-secondary hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all border-none cursor-pointer"
+                       onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(altModal.place + " " + (form.destination || form.start_city))}`, '_blank')}
+                     >
+                       Search Google
+                     </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
-      {/* REVIEW MODAL */}
-      {reviewModal.isOpen && reviewModal.place && (
-        <div className="modal-overlay" onClick={() => setReviewModal({ isOpen: false, place: null })}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Rate {reviewModal.place.place_name}</h3>
-            <ReviewForm
-              place={reviewModal.place}
-              destination={form.destination}
-              onClose={() => setReviewModal({ isOpen: false, place: null })}
-            />
+      {/* RATING REVIEW MODAL */}
+      <AnimatePresence>
+        {reviewModal.isOpen && reviewModal.place && (
+          <div 
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[999] px-4"
+            onClick={() => setReviewModal({ isOpen: false, place: null })}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative text-slate-900"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                className="absolute top-4 right-4 p-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-955 transition-colors cursor-pointer border-none" 
+                onClick={() => setReviewModal({ isOpen: false, place: null })}
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <ReviewForm
+                place={reviewModal.place}
+                destination={form.destination}
+                onClose={() => setReviewModal({ isOpen: false, place: null })}
+              />
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
     </div>
   );
