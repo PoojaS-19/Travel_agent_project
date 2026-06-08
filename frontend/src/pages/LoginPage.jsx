@@ -69,7 +69,7 @@ export default function LoginPage() {
             <Compass className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Welcome Back</h2>
-          <p className="text-xs text-slate-500 mt-2">Login to your TripAI Travel account</p>
+          <p className="text-xs text-slate-500 mt-2">Login to your Travel Trip account</p>
         </div>
 
         {inviteToken && (

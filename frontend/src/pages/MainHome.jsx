@@ -57,7 +57,7 @@ const TESTIMONIALS = [
   {
     name: "Sarah Jenkins",
     role: "Adventure Enthusiast",
-    text: "TripAI travel plan took all the friction out of our family vacation. The live expense splitting and mapping are game changers!",
+    text: "Travel Trip took all the friction out of our family vacation. The live expense splitting and mapping are game changers!",
     rating: 5,
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&q=80"
   },
@@ -695,7 +695,7 @@ export default function MainHome() {
       {/* Why Choose Us Features Section */}
       <div className="w-full max-w-5xl px-4 py-16 text-left">
         <h2 className="text-3xl font-black text-[#0a2240] tracking-tight mb-2 text-center md:text-left">
-          Why Plan With TripAI Travel?
+          Why Plan With Travel Trip?
         </h2>
         <p className="text-slate-500 text-sm mb-12 text-center md:text-left font-medium">Next-generation workspace tools designed for collaborative planning.</p>
         
@@ -773,7 +773,7 @@ export default function MainHome() {
           <div className="space-y-4">
             <h4 className="text-white font-extrabold text-lg flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-brand-secondary" />
-              <span>TripAI Travel</span>
+              <span>Travel Trip</span>
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
               Your next-generation generative AI travel assistant. Plan, collaborate, budget, and explore like never before.
@@ -800,14 +800,14 @@ export default function MainHome() {
           <div>
             <h5 className="text-white font-bold text-sm mb-4 uppercase tracking-wider">Contact</h5>
             <ul className="space-y-2 text-xs text-slate-400 list-none p-0">
-              <li>Email: contact@tripai.travel</li>
+              <li>Email: contact@traveltrip.com</li>
               <li>Support: +1 (800) 555-TRIP</li>
               <li>Location: San Francisco, CA</li>
             </ul>
           </div>
         </div>
         <div className="max-w-5xl mx-auto px-4 mt-12 pt-8 border-t border-white/5 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} TripAI Travel Inc. All rights reserved.
+          © {new Date().getFullYear()} Travel Trip Inc. All rights reserved.
         </div>
       </footer>
     </div>

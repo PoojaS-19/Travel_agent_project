@@ -61,10 +61,58 @@ export default function RestaurantsPage() {
 
       {/* RESULTS */}
       <div className="max-w-4xl mx-auto px-4 mt-8">
-        {restaurants.length === 0 && !loading && city.trim() && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
-            No restaurants found for this city.
-          </div>
+        {restaurants.length === 0 && !loading && (
+          <>
+            {city.trim() ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
+                No restaurants found for this city. Try a different search!
+              </div>
+            ) : (
+              <div className="empty-state-content py-6 md:py-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-sm">🏨</div>
+                  <h2 className="text-2xl font-black text-slate-800 tracking-tight">Top Recommended Stays</h2>
+                </div>
+                <p className="text-slate-500 mb-8 max-w-2xl leading-relaxed text-sm md:text-base">Explore premium accommodations with the best dining options. Click any hotel to view its location and details.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    { name: "The Taj Mahal Palace", location: "Mumbai, India", rating: "4.9", price: "₹15,000", image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=400&fit=crop", tags: ["Sea View", "Luxury Dining"] },
+                    { name: "Oberoi Amarvilas", location: "Agra, India", rating: "4.8", price: "₹22,000", image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=600&h=400&fit=crop", tags: ["Taj View", "Premium"] },
+                    { name: "Leela Palace", location: "New Delhi, India", rating: "4.7", price: "₹18,000", image: "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&h=400&fit=crop", tags: ["City Center", "Spa"] }
+                  ].map((hotel, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + " " + hotel.location)}`, "_blank")}
+                      className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group flex flex-col"
+                    >
+                      <div className="h-48 overflow-hidden relative shrink-0">
+                        <img src={hotel.image} alt={hotel.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                        <div className="absolute top-3 right-3 bg-white/95 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-slate-800 shadow-sm flex items-center gap-1">
+                          ⭐ {hotel.rating}
+                        </div>
+                      </div>
+                      <div className="p-5 flex flex-col flex-1">
+                        <h4 className="font-extrabold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors mb-1">{hotel.name}</h4>
+                        <p className="text-xs text-slate-500 mb-4 flex items-center gap-1">
+                          <span>📍</span> {hotel.location}
+                        </p>
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {hotel.tags.map(tag => (
+                            <span key={tag} className="text-[10px] font-bold uppercase tracking-wider bg-slate-50 text-slate-600 border border-slate-100 px-2 py-1 rounded-md">{tag}</span>
+                          ))}
+                        </div>
+                        <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center">
+                          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Starts from</span>
+                          <span className="text-slate-900 font-black">{hotel.price}<span className="text-xs text-slate-500 font-normal">/night</span></span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <div className="grid grid-cols-1 gap-4">

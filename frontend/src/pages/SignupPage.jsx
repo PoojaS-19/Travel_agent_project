@@ -60,7 +60,7 @@ export default function SignupPage() {
             <Compass className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Create Account</h2>
-          <p className="text-xs text-slate-500 mt-2">Join TripAI Travel and plan together</p>
+          <p className="text-xs text-slate-500 mt-2">Join Travel Trip and plan together</p>
         </div>
 
         {inviteToken && (

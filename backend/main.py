@@ -13,9 +13,10 @@ from app.routers.places import router as places_router
 from app.routers.reviews import router as reviews_router
 from app.routers.collaboration import router as collaboration_router, websocket_trip_endpoint
 from app.routers.itinerary import router as itinerary_router
+from app.routers.buses import router as buses_router
 
 app = FastAPI(
-    title="AI Travel Agent & Collaborative Planner",
+    title="Travel Trip",
     description="A modern production-ready full-stack travel assistant.",
     version="1.0.0"
 )
@@ -71,7 +72,7 @@ async def startup_event():
 # --- Root Endpoint ---
 @app.get("/")
 def home():
-    return {"message": "AI Travel Agent API is working flawlessly!"}
+    return {"message": "Travel Trip API is working flawlessly!"}
 
 # --- Router Registration ---
 app.include_router(auth_router)
@@ -81,6 +82,7 @@ app.include_router(places_router)
 app.include_router(reviews_router, prefix="/api")
 app.include_router(collaboration_router)
 app.include_router(itinerary_router)
+app.include_router(buses_router)
 
 # --- WebSocket Route Registration ---
 app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)

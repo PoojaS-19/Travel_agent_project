@@ -265,6 +265,39 @@ export default function TrainSearchPage() {
           </div>
         )}
 
+        {trains.length === 0 && !loading && !error && (
+          <div className="empty-state-content py-6 md:py-10 text-left">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-sm">🚆</div>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">Popular Train Routes</h2>
+            </div>
+            <p className="text-slate-500 mb-8 max-w-2xl leading-relaxed text-sm md:text-base">Discover scenic train journeys and convenient intercity travel routes across the country.</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { route: "Mumbai to Goa", train: "Tejas Express", duration: "8h 30m", price: "₹1,200", image: "https://images.unsplash.com/photo-1542836248-2b1b369c7333?w=600&h=400&fit=crop" },
+                { route: "Delhi to Agra", train: "Gatimaan Express", duration: "1h 40m", price: "₹850", image: "https://images.unsplash.com/photo-1548013146-72479768bada?w=600&h=400&fit=crop" },
+                { route: "Bangalore to Chennai", train: "Shatabdi Express", duration: "4h 55m", price: "₹950", image: "https://images.unsplash.com/photo-1532168393557-463d596646ce?w=600&h=400&fit=crop" }
+              ].map((trip, idx) => (
+                <div key={idx} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col">
+                  <div className="h-40 overflow-hidden relative shrink-0">
+                    <img src={trip.image} alt={trip.route} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                  </div>
+                  <div className="p-5 flex flex-col flex-1 text-left">
+                    <h4 className="font-extrabold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors mb-2">{trip.route}</h4>
+                    <p className="text-xs text-slate-500 mb-2 font-bold">{trip.train}</p>
+                    <p className="text-xs text-slate-400 mb-4 flex items-center gap-1">⏱ {trip.duration}</p>
+                    <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Starts from</span>
+                      <span className="text-brand-accent font-black">{trip.price}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!loading && trains.map((t, i) => (
           <div 
             className="bg-white border border-slate-200 rounded-xl p-5 mb-4 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-stretch md:items-center gap-6"
@@ -278,9 +311,16 @@ export default function TrainSearchPage() {
               <div className="text-left">
                 <h3 className="text-slate-900 font-extrabold text-base leading-snug">{t.name}</h3>
                 <p className="text-xs text-slate-400 mt-0.5">Train #{t.train_number}</p>
-                <span className="inline-block mt-2 text-[10px] bg-slate-100 border border-slate-200 text-slate-500 px-2.5 py-0.5 rounded-full font-bold uppercase">
-                  {t.type}
-                </span>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="inline-block text-[10px] bg-slate-100 border border-slate-200 text-slate-500 px-2.5 py-0.5 rounded-full font-bold uppercase">
+                    {t.type}
+                  </span>
+                  {t.live_status && (
+                    <span className={`inline-block text-[10px] border px-2.5 py-0.5 rounded-full font-bold uppercase ${t.live_status === 'On Time' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                      🔴 Live: {t.live_status}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

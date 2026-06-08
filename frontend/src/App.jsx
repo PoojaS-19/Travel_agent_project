@@ -42,7 +42,7 @@ function NavigationBar({ language, setLanguage, user, handleLogout }) {
           <Compass className="w-6 h-6 shrink-0" />
         </span>
         <span className="font-extrabold text-brand-primary tracking-tight">
-          MakeMyTrip<span className="text-brand-accent text-xs font-black uppercase align-super ml-0.5">AI</span>
+          Travel<span className="text-brand-accent font-black uppercase ml-1">Trip</span>
         </span>
       </Link>
 

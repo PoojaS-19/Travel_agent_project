@@ -271,8 +271,45 @@ export default function BusSearchPage() {
         {/* RESULTS SECTION */}
         {buses.length > 0 && !selectedBus && <h3 className="text-left font-black text-[#0a2240] text-lg mb-4">Available Bus Operators</h3>}
         
-        {buses.length === 0 && !loading && form.departure && !selectedBus && (
-           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">No buses found for this route.</div>
+        {buses.length === 0 && !loading && !selectedBus && (
+          <>
+            {form.departure ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
+                No buses found for this route.
+              </div>
+            ) : (
+              <div className="empty-state-content py-6 md:py-10 text-left">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-sm">🚌</div>
+                  <h2 className="text-2xl font-black text-slate-800 tracking-tight">Popular Bus Routes</h2>
+                </div>
+                <p className="text-slate-500 mb-8 max-w-2xl leading-relaxed text-sm md:text-base">Explore the most traveled bus routes for a comfortable and budget-friendly journey.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    { route: "Mumbai to Pune", operator: "Neeta Travels", duration: "3h 15m", price: "₹450", image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&h=400&fit=crop" },
+                    { route: "Delhi to Manali", operator: "Zingbus", duration: "12h 30m", price: "₹1,100", image: "https://images.unsplash.com/photo-1605649487212-4d43be6797a1?w=600&h=400&fit=crop" },
+                    { route: "Bangalore to Goa", operator: "VRL Travels", duration: "14h 00m", price: "₹1,500", image: "https://images.unsplash.com/photo-1515091943-9d5c0ad475af?w=600&h=400&fit=crop" }
+                  ].map((trip, idx) => (
+                    <div key={idx} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col">
+                      <div className="h-40 overflow-hidden relative shrink-0">
+                        <img src={trip.image} alt={trip.route} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      </div>
+                      <div className="p-5 flex flex-col flex-1 text-left">
+                        <h4 className="font-extrabold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors mb-2">{trip.route}</h4>
+                        <p className="text-xs text-slate-500 mb-2 font-bold">{trip.operator}</p>
+                        <p className="text-xs text-slate-400 mb-4 flex items-center gap-1">⏱ {trip.duration}</p>
+                        <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center">
+                          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Starts from</span>
+                          <span className="text-brand-accent font-black">{trip.price}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
         
         {!selectedBus && (

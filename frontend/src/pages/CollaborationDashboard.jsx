@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import api from "../api";
@@ -1005,7 +1006,12 @@ export default function CollaborationDashboard() {
       {/* Advanced Itinerary Progress System Section (Phase 1 - Read-Only) */}
       {/* Advanced Itinerary Progress System Section (Phase 2) */}
       {itinerary?.daily_plans && itinerary.daily_plans.length > 0 && (
-        <section className="itinerary-progress-section collab-section">
+        <motion.section 
+          className="itinerary-progress-section collab-section"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <h3>📋 Itinerary Progress Dashboard</h3>
           <div className="progress-grid">
             
@@ -1039,7 +1045,12 @@ export default function CollaborationDashboard() {
                   const skippedCount = allActs.filter(a => a.status === "skipped").length;
                   const activeTotal = allActs.length - skippedCount;
                   return (
-                    <div className="current-destination-card trip-completed">
+                    <motion.div 
+                      className="current-destination-card trip-completed"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                    >
                       <span className="card-header-label">Trip State</span>
                       <h4 className="card-place-name">
                         🎉 Trip Completed!
@@ -1058,7 +1069,7 @@ export default function CollaborationDashboard() {
                           <span className="card-meta-value">{skippedCount} skipped</span>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 }
 
@@ -1092,7 +1103,13 @@ export default function CollaborationDashboard() {
 
                 const typeDetails = getActivityTypeDetails(currentAct);
                 return (
-                  <div className="current-destination-card">
+                  <motion.div 
+                    className="current-destination-card"
+                    layout
+                    initial={{ scale: 0.95, opacity: 0, x: -20 }}
+                    animate={{ scale: 1, opacity: 1, x: 0 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  >
                     <span className="card-header-label">Current Destination &middot; {typeDetails.emoji} {typeDetails.name}</span>
                     <h4 className="card-place-name">
                       {typeDetails.emoji} {currentAct.place_name || "Unknown Location"}
@@ -1139,13 +1156,20 @@ export default function CollaborationDashboard() {
                         </button>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })()}
 
               {/* Assisted Auto-Completion Prompt */}
+              <AnimatePresence>
               {showAssistedCompletion && currentAct && (
-                <div className="assisted-completion-prompt-card">
+                <motion.div 
+                  className="assisted-completion-prompt-card"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
                   <div className="prompt-header">
                     <span>💡 Assisted Auto-Completion Suggestion</span>
                   </div>
@@ -1180,12 +1204,20 @@ export default function CollaborationDashboard() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
 
               {/* Smart Suggestion Card (Advisory only) */}
+              <AnimatePresence>
               {canEdit && currentActiveDestination && itinerary?.current_visit?.status === "arrived" && leaderStayDuration >= 1800 && (
-                <div className="smart-suggestion-card">
+                <motion.div 
+                  className="smart-suggestion-card"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
                   <div className="suggestion-icon">💡</div>
                   <div className="suggestion-content">
                     <h5>Smart Suggestion</h5>
@@ -1211,8 +1243,9 @@ export default function CollaborationDashboard() {
                       {progressionLoading ? "Updating..." : "✓ Mark Completed"}
                     </button>
                   </div>
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
 
               {/* Trip Progress Bar */}
               {(() => {
@@ -1234,7 +1267,12 @@ export default function CollaborationDashboard() {
                 const emptyBlocks = "░".repeat(emptyWidth);
 
                 return (
-                  <div className="trip-progress-box">
+                  <motion.div 
+                    className="trip-progress-box"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.5 }}
+                  >
                     <div className="progress-box-header">
                       <span className="progress-title">Trip Progress</span>
                       <span className="progress-percentage">{percentage}%</span>
@@ -1252,7 +1290,7 @@ export default function CollaborationDashboard() {
                     <div className="progress-info-text">
                       <strong>{completedCount}</strong> of <strong>{activeTotal}</strong> destinations completed {skippedCount > 0 && <span className="skipped-note" style={{ color: "#64748b", fontSize: "11px", marginLeft: "4px" }}>({skippedCount} skipped)</span>}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })()}
             </div>
@@ -1265,7 +1303,13 @@ export default function CollaborationDashboard() {
                   if (dayActivities.length === 0) return null;
 
                   return (
-                    <div key={dayPlan.day} className="timeline-day-block">
+                    <motion.div 
+                      key={dayPlan.day} 
+                      className="timeline-day-block"
+                      initial={{ opacity: 0, x: 30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: dayPlan.day * 0.1, duration: 0.4 }}
+                    >
                       <h4>Day {dayPlan.day}{dayPlan.date ? ` · ${dayPlan.date}` : ""}</h4>
                       
                       <div className="timeline-activities">
@@ -1305,14 +1349,14 @@ export default function CollaborationDashboard() {
                           );
                         })}
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
             </div>
 
           </div>
-        </section>
+        </motion.section>
       )}
 
       {showFollowersCard && isOwner && (

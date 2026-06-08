@@ -202,10 +202,52 @@ export default function FlightsPage() {
       {/* RESULTS SECTION */}
       <div className="flights-page max-w-5xl mx-auto px-4 mt-8">
         <div className="flight-results-enhanced">
-          {flights.length === 0 && !loading && form.departure && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
-              No flights found for this route and date.
-            </div>
+          {flights.length === 0 && !loading && (
+            <>
+              {form.departure ? (
+                <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
+                  No flights found for this route and date.
+                </div>
+              ) : (
+                <div className="empty-state-content py-6 md:py-10 text-left">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-sm">✈️</div>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Popular Flight Destinations</h2>
+                  </div>
+                  <p className="text-slate-500 mb-8 max-w-2xl leading-relaxed text-sm md:text-base">Explore top flight routes and popular travel destinations across the globe.</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[
+                      { dest: "Dubai, UAE", code: "DXB", price: "₹18,500", image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=600&h=400&fit=crop", airline: "Emirates" },
+                      { dest: "London, UK", code: "LHR", price: "₹45,000", image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&h=400&fit=crop", airline: "British Airways" },
+                      { dest: "Singapore", code: "SIN", price: "₹22,000", image: "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=600&h=400&fit=crop", airline: "Singapore Airlines" }
+                    ].map((flight, idx) => (
+                      <div 
+                        key={idx} 
+                        className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col"
+                      >
+                        <div className="h-40 overflow-hidden relative shrink-0">
+                          <img src={flight.image} alt={flight.dest} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                          <div className="absolute top-3 left-3 bg-white/95 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-slate-800 shadow-sm flex items-center gap-1 uppercase tracking-wider">
+                            {flight.code}
+                          </div>
+                        </div>
+                        <div className="p-5 flex flex-col flex-1">
+                          <h4 className="font-extrabold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors mb-2">{flight.dest}</h4>
+                          <p className="text-xs text-slate-500 mb-4 flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">✈️</span> {flight.airline}
+                          </p>
+                          <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center">
+                            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">One-way from</span>
+                            <span className="text-brand-accent font-black">{flight.price}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {flights.map((f, i) => (
