@@ -105,6 +105,16 @@ export default function CollaborationDashboard() {
   const { tripId } = useParams();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [progressionLoading, setProgressionLoading] = useState(false);
+  const [successToast, setSuccessToast] = useState("");
+
+  const handleCopyInviteLink = (inviteLink, email) => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink);
+    setSuccessToast(`Invite link copied for ${email}!`);
+    setTimeout(() => {
+      setSuccessToast("");
+    }, 3000);
+  };
   const {
     dashboard,
     suggestions,
@@ -769,12 +779,35 @@ export default function CollaborationDashboard() {
           );
         })}
         {(dashboard?.pending_invitations || []).map((invite) => (
-          <div className="member-chip pending" key={invite.id}>
-            <span>✉️</span>
-            <div>
-              <strong>{invite.email}</strong>
-              <small>pending {invite.role === "follower" ? "buddy" : invite.role}</small>
+          <div className="member-chip pending" key={invite.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span>✉️</span>
+              <div>
+                <strong>{invite.email}</strong>
+                <small>pending {invite.role === "follower" ? "buddy" : invite.role}</small>
+              </div>
             </div>
+            {invite.invite_link && (
+              <button
+                type="button"
+                className="copy-invite-btn"
+                style={{
+                  padding: "4px 8px",
+                  fontSize: "12px",
+                  background: "#ffffff",
+                  color: "#2563eb",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "500",
+                  marginLeft: "auto"
+                }}
+                onClick={() => handleCopyInviteLink(invite.invite_link, invite.email)}
+                title="Copy Shareable Invite Link"
+              >
+                Copy Link
+              </button>
+            )}
           </div>
         ))}
       </section>
@@ -1630,6 +1663,11 @@ export default function CollaborationDashboard() {
           </>
         )}
       </div>
+      {successToast && (
+        <div className="custom-toast">
+          <span>{successToast}</span>
+        </div>
+      )}
     </main>
   );
 }

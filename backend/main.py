@@ -46,6 +46,15 @@ async def startup_event():
             # Column might already exist
             pass
 
+        # Check and add token column to trip_invitations if missing
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN token VARCHAR(255)"))
+                print("Dynamic migration: Added 'token' column to 'trip_invitations'")
+        except Exception as token_error:
+            # Column might already exist
+            pass
+
         # Ensure 'FOLLOWER' is added to 'collaboratorrole' type if using PostgreSQL
         try:
             if engine.dialect.name == "postgresql":
@@ -84,3 +93,6 @@ app.include_router(itinerary_router)
 
 # --- WebSocket Route Registration ---
 app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)
+
+# Reload trigger comment (PostgreSQL restored)
+

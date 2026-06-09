@@ -22,6 +22,9 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
     pool_pre_ping=True,
+    pool_recycle=280,
+    pool_size=10,
+    max_overflow=20,
 )
 
 # Session factory

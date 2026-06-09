@@ -1260,3 +1260,45 @@
   border-color: rgba(255, 255, 255, 0.35) !important;
 }
 
+/* Custom success toast */
+.custom-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  background: #10b981;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  animation: slideInUp 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards;
+  font-family: 'Inter', sans-serif;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.copy-invite-btn:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #1d4ed8 !important;
+}
+

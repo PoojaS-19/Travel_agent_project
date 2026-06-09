@@ -126,6 +126,7 @@ class CollaborationService:
         email_sent: bool = False,
         email_error: Optional[str] = None,
     ) -> InvitationResponse:
+        raw_token = raw_token or getattr(invitation, "token", None)
         invite_link = f"{CLIENT_BASE_URL}/collaboration/accept?token={raw_token}" if raw_token else None
         return InvitationResponse(
             id=invitation.id,
@@ -306,6 +307,7 @@ class CollaborationService:
             if invitation:
                 invitation.role = role_enum
                 invitation.token_hash = token_hash
+                invitation.token = token
                 invitation.otp_code = otp_code
                 invitation.expires_at = datetime.utcnow() + timedelta(days=INVITE_EXPIRE_DAYS)
                 invitation.updated_at = datetime.utcnow()
@@ -315,6 +317,7 @@ class CollaborationService:
                     email=email,
                     role=role_enum,
                     token_hash=token_hash,
+                    token=token,
                     otp_code=otp_code,
                     invited_by_user_id=owner_id,
                     expires_at=datetime.utcnow() + timedelta(days=INVITE_EXPIRE_DAYS),
@@ -342,6 +345,7 @@ class CollaborationService:
             raise HTTPException(status_code=409, detail=f"Invitation is {self._role_value(invitation.status)}")
         if invitation.expires_at <= datetime.utcnow():
             invitation.status = InvitationStatus.EXPIRED
+            invitation.token = None
             self.db.commit()
             raise HTTPException(status_code=410, detail="Invitation has expired")
 
@@ -362,6 +366,7 @@ class CollaborationService:
         invitation.status = InvitationStatus.ACCEPTED
         invitation.accepted_by_user_id = user_id
         invitation.accepted_at = datetime.utcnow()
+        invitation.token = None
         self.db.flush()
         self.notify_trip_owner(invitation.trip_id, user_id, NotificationType.INVITE_ACCEPTED, "Invite accepted", f"{user.username} joined your trip.")
         self.db.commit()
@@ -375,6 +380,7 @@ class CollaborationService:
             raise HTTPException(status_code=404, detail="Invitation not found")
         invitation.status = InvitationStatus.REVOKED
         invitation.revoked_at = datetime.utcnow()
+        invitation.token = None
         self.db.commit()
 
     def create_suggestion(self, trip_id: int, user_id: int, data) -> TripSuggestion:
@@ -563,6 +569,7 @@ class CollaborationService:
             
         if invitation.expires_at <= datetime.utcnow():
             invitation.status = InvitationStatus.EXPIRED
+            invitation.token = None
             self.db.commit()
             raise HTTPException(status_code=410, detail="Invitation has expired")
 
@@ -583,6 +590,7 @@ class CollaborationService:
         invitation.status = InvitationStatus.ACCEPTED
         invitation.accepted_by_user_id = target_user.id
         invitation.accepted_at = datetime.utcnow()
+        invitation.token = None
         self.db.flush()
         
         self.notify_trip_owner(invitation.trip_id, target_user.id, NotificationType.INVITE_ACCEPTED, "Invite accepted", f"{target_user.username} joined your trip.")
@@ -604,7 +612,7 @@ class CollaborationService:
         self.db.flush()
         
         # Sync leader coordinates to member_locations table
-        self.update_member_location(trip_id, user_id, lat, lon)
+        self.update_member_location(trip_id, user_id, lat, lon, commit=False)
         
         trip = self.repo.get_trip(trip_id)
         if not trip or not trip.daily_plans:
@@ -679,7 +687,7 @@ class CollaborationService:
         self.db.commit()
         return leader_loc, events_triggered
 
-    def update_member_location(self, trip_id: int, user_id: int, latitude: float, longitude: float) -> MemberLocation:
+    def update_member_location(self, trip_id: int, user_id: int, latitude: float, longitude: float, commit: bool = True) -> MemberLocation:
         self.require_member(trip_id, user_id)
         
         loc = self.db.query(MemberLocation).filter_by(trip_id=trip_id, user_id=user_id).first()
@@ -698,8 +706,10 @@ class CollaborationService:
             loc.longitude = longitude
             loc.last_updated = datetime.utcnow()
         
-        self.db.commit()
-        self.db.refresh(loc)
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return loc
 
     def toggle_sharing_status(self, trip_id: int, user_id: int, is_sharing: bool) -> MemberLocation:
@@ -721,7 +731,6 @@ class CollaborationService:
             loc.last_updated = datetime.utcnow()
             
         self.db.commit()
-        self.db.refresh(loc)
         return loc
 
     def get_member_locations(self, trip_id: int) -> List[dict]:

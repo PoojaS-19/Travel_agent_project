@@ -86,6 +86,7 @@ class TripInvitation(Base):
     email = Column(String(255), nullable=False)
     role = Column(Enum(CollaboratorRole), nullable=False, default=CollaboratorRole.EDITOR)
     token_hash = Column(String(128), unique=True, nullable=False)
+    token = Column(String(255), nullable=True)
     otp_code = Column(String(6), nullable=True)
     status = Column(Enum(InvitationStatus), nullable=False, default=InvitationStatus.PENDING)
     invited_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

@@ -56,17 +56,63 @@ export default function InviteMembersModal({ open, onClose, onInvite }) {
 
         {results.length > 0 && (
           <div className="invite-results">
-            {results.map((invite) => (
-              <div className="invite-result" key={`${invite.email}-${invite.id}`}>
-                <strong>{invite.email}</strong>
-                <span>{invite.email_sent ? "Email sent" : invite.email_error || "Email not sent"}</span>
-                {invite.invite_link && (
-                  <button type="button" onClick={() => navigator.clipboard.writeText(invite.invite_link)}>
-                    Copy invite link
-                  </button>
-                )}
-              </div>
-            ))}
+            {results.map((invite) => {
+              const hasFailed = !invite.email_sent;
+              return (
+                <div 
+                  className={`invite-result ${hasFailed ? "email-failed" : "email-success"}`} 
+                  key={`${invite.email}-${invite.id}`}
+                  style={{
+                    borderLeft: hasFailed ? "4px solid #f59e0b" : "4px solid #10b981",
+                    background: hasFailed ? "#fffbeb" : "#f0fdf4",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong>{invite.email}</strong>
+                    <span style={{ 
+                      fontSize: "12px", 
+                      fontWeight: "bold",
+                      color: hasFailed ? "#d97706" : "#16a34a" 
+                    }}>
+                      {hasFailed ? "⚠ Email Delivery Failed" : "✓ Email Sent"}
+                    </span>
+                  </div>
+                  {hasFailed && (
+                    <p style={{ margin: 0, fontSize: "13px", color: "#b45309" }}>
+                      {invite.email_error || "Email delivery failed, but the invitation is active. You can copy the link below and share it manually."}
+                    </p>
+                  )}
+                  {invite.invite_link && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        navigator.clipboard.writeText(invite.invite_link);
+                        alert(`Invite link copied for ${invite.email}!`);
+                      }}
+                      style={{
+                        alignSelf: "flex-start",
+                        background: hasFailed ? "#d97706" : "#10b981",
+                        color: "white",
+                        padding: "6px 12px",
+                        fontSize: "13px",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Copy invite link
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -1,0 +1,22 @@
+GOOGLE_API_KEY=AIzaSyDmnlAP4vFTElTNrnc7yZI80LyTv82vUJE
+GEMINI_API_KEY=AIzaSyBsp_F9KOSAAHpF_1FcgI7W-m9oWTtTmbo
+AMADEUS_API_KEY=Y5ee404bhqTwdmZaNHy7D8FTmRegFsAf
+AMADEUS_API_SECRET=W9TmRXjTqGpVUR3ms
+
+TRAIN_API_KEY=1b011dc523mshb6eefcfad4648e3p1abe47jsn548793b33eb8
+TRAIN_API_URL=https://irctc-insight.p.rapidapi.com
+
+
+# Email invitations
+# Fill these with a real SMTP account, then restart FastAPI.
+# For Gmail, SMTP_PASSWORD must be a Google App Password, not your normal password.
+FRONTEND_BASE_URL=http://192.168.0.116:5173
+FROM_EMAIL=poojashelke1905@gmail.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=poojashelke1905@gmail.com
+SMTP_PASSWORD=uzzsgeetcwlieuaz
+SMTP_USE_TLS=true
+
+# JWT Secret Key (change this in production to a strong random string)
+SECRET_KEY=your-super-secret-jwt-key-change-in-production-12345
