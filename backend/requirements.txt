@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 google-generativeai
+groq
 amadeus
 python-dotenv
 requests

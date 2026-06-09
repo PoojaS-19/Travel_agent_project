@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import API, { API_BASE_URL } from "../api";
 import "../App.css";
+import { 
+  MessageSquare, Send, Mic, MapPin, ShieldAlert, Sparkles, X, 
+  Phone, RefreshCw, AlertCircle, Compass, Square, Power, Eye
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function FloatingChatbot({ language, setChatItinerary, setChatDailyPlans }) {
   const navigate = useNavigate();
@@ -26,7 +31,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
   /* ---------- Speech Recognition Setup ---------- */
   useEffect(() => {
-    // Check if browser supports Speech Recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -80,7 +84,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
   }, [open]);
 
   const detectLocation = () => {
-    // Default to Pune coordinates if location fails or is denied
     const fallbackCoords = { lat: 18.5204, lon: 73.8567 };
 
     if (!navigator.geolocation) {
@@ -112,12 +115,10 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
     setQuestion("");
     
-    // Add user message to state
     const newUserMsg = { sender: "user", text: userText };
     setMessages(prev => [...prev, newUserMsg]);
     setLoading(true);
 
-    // Prepare history (last 10 messages)
     const history = messages.slice(-10);
 
     abortControllerRef.current = new AbortController();
@@ -148,7 +149,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
       const decoder = new TextDecoder();
       let fullResponse = "";
       
-      // Add empty bot message that we will stream into
       setMessages(prev => [...prev, { sender: "bot", text: "", planData: null, optionsData: null }]);
 
       let isPlan = false;
@@ -162,9 +162,8 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
         buffer += decoder.decode(value, { stream: true });
         
-        // Process SSE lines
         const lines = buffer.split('\n\n');
-        buffer = lines.pop() || ""; // keep incomplete line in buffer
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -176,12 +175,10 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
               } else if (data.text) {
                 fullResponse += data.text;
                 
-                // Update the last message with the current streamed text
                 setMessages(prev => {
                   const newMsgs = [...prev];
                   const lastMsg = newMsgs[newMsgs.length - 1];
                   
-                  // Clean any system tags from the response
                   let cleanText = fullResponse
                     .replace(/\[CHAT\]/g, '')
                     .replace(/\[INFO\]/g, '')
@@ -189,10 +186,8 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                     .replace(/\[OPTIONS\]/g, '')
                     .replace(/\[EMERGENCY\]/g, '');
 
-                  // If we see ---JSON_START---, it means the rest is JSON
                   if (cleanText.includes("---JSON_START---")) {
                     isPlan = true;
-                    // Just show the text before JSON_START while streaming
                     lastMsg.text = cleanText.split("---JSON_START---")[0].trim();
                   } else if (cleanText.includes("---OPTIONS_START---")) {
                     isOptions = true;
@@ -207,9 +202,7 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   return newMsgs;
                 });
               } else if (data.done) {
-                // Done streaming
                 if (isPlan) {
-                  // Extract JSON
                   try {
                     const jsonPart = fullResponse.split("---JSON_START---")[1].split("---JSON_END---")[0];
                     const planData = JSON.parse(jsonPart.trim());
@@ -253,15 +246,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
                   } catch (e) {
                     console.error("Failed to parse emergency JSON", e);
                   }
-                } else {
-                  let finalClean = fullResponse
-                    .replace(/\[CHAT\]/g, '')
-                    .replace(/\[INFO\]/g, '')
-                    .replace(/\[PLAN\]/g, '')
-                    .replace(/\[OPTIONS\]/g, '')
-                    .replace(/\[EMERGENCY\]/g, '')
-                    .trim();
-                  // We removed setChatItinerary(finalClean) here so standard chat messages don't bleed onto the main UI board.
                 }
               }
             } catch (e) {
@@ -298,7 +282,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
   /* ---------- NEARBY ---------- */
   const fetchNearby = async () => {
-
     if (!coords) {
       detectLocation();
       setMessages(prev => [
@@ -326,7 +309,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
       data.hospitals?.forEach(p => text += `🚑 ${p.name} (${p.distance} km)\nhttps://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name)}\n`);
 
       setMessages(prev => [...prev, { sender: "bot", text }]);
-
     } catch {
       setMessages(prev => [...prev, { sender: "bot", text: "Unable to fetch nearby places." }]);
     }
@@ -336,7 +318,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
 
   /* ---------- EMERGENCY ---------- */
   const fetchEmergency = async () => {
-
     if (!coords) {
       detectLocation();
       setMessages(prev => [
@@ -368,7 +349,6 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
            text: text.trim()
          }]);
       }
-
     } catch {
       setMessages(prev => [...prev, { sender: "bot", text: "Unable to find hospital." }]);
     }
@@ -377,226 +357,312 @@ export default function FloatingChatbot({ language, setChatItinerary, setChatDai
   };
 
   const fetchIncidentPlan = async () => {
-  if (!coords) {
-    detectLocation();
-    setMessages(prev => [...prev, { sender: "bot", text: "Detecting location..." }]);
-    return;
-  }
-
-  setMessages(prev => [...prev, { sender: "user", text: "I had an accident. Generate new itinerary." }]);
-  setLoading(true);
-
-  let destination = "your destination";
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].planData && messages[i].planData.destination) {
-      destination = messages[i].planData.destination;
-      break;
+    if (!coords) {
+      detectLocation();
+      setMessages(prev => [...prev, { sender: "bot", text: "Detecting location..." }]);
+      return;
     }
-  }
 
-  try {
-    const res = await API.post("/incident-itinerary", { ...coords, destination });
-    const data = res.data;
+    setMessages(prev => [...prev, { sender: "user", text: "I had an accident. Generate new itinerary." }]);
+    setLoading(true);
 
-    if (data.daily_plans && data.daily_plans.length > 0) {
-       setMessages(prev => [...prev, { 
-           sender: "bot", 
-           text: data.itinerary_text || "Itinerary replanned.",
-           planData: { destination: destination, days: data.daily_plans.length, daily_plans: data.daily_plans } 
-       }]);
-       if (setChatItinerary) setChatItinerary(data.itinerary_text || "Itinerary replanned.");
-       if (setChatDailyPlans) setChatDailyPlans(data.daily_plans);
-    } else {
-       setMessages(prev => [...prev, { sender: "bot", text: data.itinerary_text || data.plan || "Unable to generate plan." }]);
+    let destination = "your destination";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].planData && messages[i].planData.destination) {
+        destination = messages[i].planData.destination;
+        break;
+      }
     }
-  } catch {
-    setMessages(prev => [...prev, { sender: "bot", text: "Unable to generate new itinerary." }]);
-  }
 
-  setLoading(false);
-};
+    try {
+      const res = await API.post("/incident-itinerary", { ...coords, destination });
+      const data = res.data;
 
+      if (data.daily_plans && data.daily_plans.length > 0) {
+         setMessages(prev => [...prev, { 
+             sender: "bot", 
+             text: data.itinerary_text || "Itinerary replanned.",
+             planData: { destination: destination, days: data.daily_plans.length, daily_plans: data.daily_plans } 
+         }]);
+         if (setChatItinerary) setChatItinerary(data.itinerary_text || "Itinerary replanned.");
+         if (setChatDailyPlans) setChatDailyPlans(data.daily_plans);
+      } else {
+         setMessages(prev => [...prev, { sender: "bot", text: data.itinerary_text || data.plan || "Unable to generate plan." }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { sender: "bot", text: "Unable to generate new itinerary." }]);
+    }
 
-  /* ---------- UI ---------- */
-  /* ---------- UI ---------- */
-return (
-  <>
-    <button className="chat-floating-btn" onClick={() => setOpen(!open)}>
-      🤖
-    </button>
+    setLoading(false);
+  };
 
-    {open && (
-      <div className="chat-floating-box">
+  return (
+    <>
+      {/* FLOATING TRIGGER BUTTON */}
+      <button 
+        className="fixed bottom-6 right-6 z-[9999] w-14 h-14 bg-gradient-to-tr from-brand-secondary to-blue-500 hover:from-blue-600 hover:to-brand-secondary rounded-full flex items-center justify-center text-white shadow-2xl hover:scale-105 transition-all focus:outline-none"
+        onClick={() => setOpen(!open)}
+      >
+        <MessageSquare className="w-6 h-6" />
+      </button>
 
-        <div className="chat-header">
-          Travel Assistant
-          <button onClick={() => setOpen(false)}>✖</button>
-        </div>
+      {/* CHATBOX WINDOW OVERLAY */}
+      <AnimatePresence>
+        {open && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 30 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            className="fixed bottom-24 right-6 w-[360px] md:w-[400px] h-[550px] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col z-[9999] overflow-hidden"
+          >
+            {/* HEADER */}
+            <div className="px-5 py-4 bg-gradient-to-r from-brand-primary to-brand-secondary flex justify-between items-center text-white font-bold">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-brand-accent animate-pulse" />
+                <span className="text-sm tracking-wide text-white">AI Travel Assistant</span>
+              </div>
+              <button 
+                onClick={() => setOpen(false)}
+                className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        <div className="chat-body simple-scrollbar">
-          {messages.map((m, i) => (
-            <div key={i} className={`bubble-adv bubble ${m.sender}`}>
-              <div className="bubble-content">
-                {/* Regular text */}
-                {m.text && m.text.split("\n").map((line, idx) =>
-                  line.startsWith("http") ? (
-                    <a
-                      key={idx}
-                      href={line}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#1e90ff", display: "block", marginTop: "4px" }}
-                    >
-                      Open in Maps
-                    </a>
-                  ) : (
-                    <div key={idx}>{line}</div>
-                  )
-                )}
-                
-                {/* Plan Card (if available) */}
-                {m.planData && (
-                  <div className="chatbot-plan-card">
-                    <h4>{m.planData.destination} Trip</h4>
-                    <span className="plan-days">{m.planData.days} Days</span>
-                    
-                    <div className="mini-timeline">
-                      {m.planData.daily_plans?.map((dp, dpi) => (
-                         <div key={dpi} className="mini-day">
-                           <strong>Day {dp.day}</strong>
-                           <div className="mini-activities">
-                             {dp.activities?.slice(0, 3).map((act, ai) => (
-                               <div key={ai} className="mini-activity">
-                                 <span>{act.time}</span> - {act.place_name}
-                               </div>
-                             ))}
-                             {dp.activities?.length > 3 && (
-                               <div className="mini-activity more">
-                                 + {dp.activities.length - 3} more activities
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                      ))}
-                    </div>
-                    
-                    <button 
-                      className="view-full-plan-btn"
-                      onClick={() => navigate('/itinerary')}
-                    >
-                      View Full Plan →
-                    </button>
+            {/* MESSAGE BODY LIST */}
+            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 bg-slate-50">
+              {messages.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center px-4 space-y-3">
+                  <div className="w-12 h-12 bg-brand-secondary/10 border border-brand-secondary/20 rounded-xl flex items-center justify-center text-brand-secondary">
+                    <Compass className="w-6 h-6 animate-spin-slow" />
                   </div>
-                )}
-                
-                {/* Options Card (if available) */}
-                {m.optionsData && (
-                  <div className="chatbot-options-container">
-                    <h4>Select a Trip Option:</h4>
-                    {m.optionsData.map((opt, oi) => (
-                      <div key={oi} className="chatbot-option-card">
-                        <h5>{opt.title}</h5>
-                        <p className="opt-duration">{opt.duration}</p>
-                        <p>{opt.description}</p>
+                  <h4 className="text-sm font-bold text-slate-800">Start Planning Your Journey</h4>
+                  <p className="text-xs text-slate-500">Ask about weather, hotels, budget trips, or select a category below to search nearby attractions.</p>
+                </div>
+              )}
+
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${m.sender === "user" ? "bg-brand-secondary text-white rounded-tr-none" : "bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm"}`}>
+                    {m.text && m.text.split("\n").map((line, idx) =>
+                      line.startsWith("http") ? (
+                        <a
+                          key={idx}
+                          href={line}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`${m.sender === "user" ? "text-blue-100 hover:text-white" : "text-brand-secondary hover:text-blue-700"} hover:underline block font-semibold mt-1`}
+                        >
+                          🗺️ View Google Maps route
+                        </a>
+                      ) : (
+                        <div key={idx}>{line}</div>
+                      )
+                    )}
+
+                    {/* Plan Details Card */}
+                    {m.planData && (
+                      <div className="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 shadow-inner">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-bold text-brand-primary text-xs">{m.planData.destination} Trip</h4>
+                          <span className="text-[10px] px-2 py-0.5 bg-brand-secondary/10 border border-brand-secondary/30 rounded-full text-brand-secondary font-semibold">{m.planData.days} Days</span>
+                        </div>
+                        
+                        <div className="space-y-2 border-t border-slate-200 pt-3">
+                          {m.planData.daily_plans?.slice(0, 3).map((dp, dpi) => (
+                             <div key={dpi} className="text-xs space-y-0.5">
+                               <span className="font-bold text-slate-500">Day {dp.day}</span>
+                               <div className="space-y-0.5 pl-2">
+                                 {dp.activities?.slice(0, 2).map((act, ai) => (
+                                   <div key={ai} className="text-[11px] text-slate-600 line-clamp-1">
+                                     • {act.time && `${act.time} - `}{act.place_name}
+                                   </div>
+                                 ))}
+                               </div>
+                             </div>
+                          ))}
+                          {m.planData.daily_plans?.length > 3 && (
+                             <p className="text-[10px] text-slate-505 font-medium">+ {m.planData.daily_plans.length - 3} more days planning available</p>
+                          )}
+                        </div>
+                        
                         <button 
-                          className="select-plan-btn"
-                          onClick={() => sendMessage(`I select option ${opt.id}: ${opt.title}`)}>
-                          Select this plan
+                          onClick={() => {
+                            setOpen(false);
+                            navigate('/itinerary');
+                          }}
+                          className="w-full mt-2 py-2 bg-brand-secondary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View Complete Itinerary
                         </button>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Options Selection Container */}
+                    {m.optionsData && (
+                      <div className="mt-4 space-y-3 border-t border-slate-200 pt-3">
+                        <h5 className="font-bold text-xs text-slate-500">Select trip category:</h5>
+                        {m.optionsData.map((opt, oi) => (
+                          <div key={oi} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <h6 className="font-bold text-brand-primary text-xs">{opt.title}</h6>
+                              <span className="text-[10px] text-brand-secondary font-semibold">{opt.duration}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 leading-normal">{opt.description}</p>
+                            <button 
+                              onClick={() => sendMessage(`I select option ${opt.id}: ${opt.title}`)}
+                              className="w-full mt-1 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-brand-secondary rounded-lg text-xs font-bold transition-all shadow-sm"
+                            >
+                              Choose Option
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Emergency Alert Card */}
+                    {m.emergencyData && (
+                      <div className="mt-4 bg-rose-50 border border-rose-100 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs">
+                          <ShieldAlert className="w-4 h-4" />
+                          <span>EMERGENCY ASSISTANT</span>
+                        </div>
+                        <p className="text-[11px] text-slate-700 leading-normal">{m.emergencyData.recommended_action}</p>
+                        
+                        <div className="space-y-1.5 border-t border-rose-100 pt-3">
+                          {m.emergencyData.numbers?.map((num, ni) => (
+                            <a 
+                              key={ni} 
+                              href={`tel:${num.split(' ')[0]}`} 
+                              className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-rose-600" />
+                              Call {num}
+                            </a>
+                          ))}
+                          <button 
+                            onClick={fetchEmergency}
+                            className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/10"
+                          >
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Find Nearest Hospital
+                          </button>
+                          <button 
+                            onClick={fetchIncidentPlan}
+                            className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 text-brand-secondary" />
+                            Re-plan Trip Routes
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-                
-                {/* Emergency Card (if available) */}
-                {m.emergencyData && (
-                  <div className="emergency-card">
-                    <h4>🚨 EMERGENCY DETECTED</h4>
-                    <p className="emergency-type">{m.emergencyData.emergency_type} Emergency</p>
-                    <p className="emergency-action">{m.emergencyData.recommended_action}</p>
-                    
-                    <div className="emergency-buttons">
-                      {m.emergencyData.numbers?.map((num, ni) => (
-                        <a key={ni} href={`tel:${num.split(' ')[0]}`} className="emergency-btn call-btn">
-                          📞 Call {num}
-                        </a>
-                      ))}
-                      <button className="emergency-btn hospital-btn" onClick={fetchEmergency}>
-                        🏥 Find Nearest Hospital
-                      </button>
-                      <button className="emergency-btn replan-btn" onClick={fetchIncidentPlan}>
-                        🔄 Re-plan Trip
-                      </button>
-                    </div>
+                </div>
+              ))}
+
+              {loading && messages.length > 0 && messages[messages.length - 1].sender === "user" && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 text-xs text-slate-500 font-semibold flex items-center gap-1.5 shadow-sm">
+                    <div className="w-3 h-3 border border-brand-secondary border-t-transparent rounded-full animate-spin" />
+                    <span>AI Assistant typing...</span>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
-          ))}
 
-          {loading && messages.length > 0 && messages[messages.length - 1].sender === "user" && (
-            <div className="bubble bot">Typing...</div>
-          )}
-          <div ref={chatEndRef}></div>
-        </div>
+            {/* ACTION TRIGGERS BAR */}
+            <div className="px-3 py-2 border-t border-slate-200 flex gap-1.5 overflow-x-auto shrink-0 bg-slate-50">
+              <button 
+                onClick={fetchNearby}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 hover:text-brand-primary transition-all whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <MapPin className="w-3.5 h-3.5 text-brand-secondary" />
+                Near Me
+              </button>
+              <button 
+                onClick={fetchEmergency}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 hover:text-brand-primary transition-all whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <Phone className="w-3.5 h-3.5 text-rose-600" />
+                Emergency
+              </button>
+              <button 
+                onClick={fetchIncidentPlan}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 hover:text-brand-primary transition-all whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-brand-secondary" />
+                Incident Re-route
+              </button>
+            </div>
 
-        <div className="chat-actions">
-          <button onClick={fetchNearby}>📍 Near Me</button>
-          <button onClick={fetchEmergency}>🚑 Hospital</button>
-          <button onClick={fetchIncidentPlan}>🚨 Incident</button>
-        </div>
+            {/* QUICK PRE-SET BADGES */}
+            <div className="px-3 py-1.5 border-t border-slate-200 flex gap-2 shrink-0 bg-slate-50/50">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 self-center">Quick tags:</span>
+              <button 
+                onClick={() => sendMessage("Beach")}
+                className="text-[11px] font-bold px-2.5 py-1 bg-brand-secondary/5 hover:bg-brand-secondary/15 border border-brand-secondary/20 rounded-lg text-brand-secondary transition-colors"
+              >
+                ⛱️ Beach
+              </button>
+              <button 
+                onClick={() => sendMessage("Hill")}
+                className="text-[11px] font-bold px-2.5 py-1 bg-brand-secondary/5 hover:bg-brand-secondary/15 border border-brand-secondary/20 rounded-lg text-brand-secondary transition-colors"
+              >
+                ⛰️ Hill
+              </button>
+              <button 
+                onClick={() => sendMessage("Adventure")}
+                className="text-[11px] font-bold px-2.5 py-1 bg-brand-secondary/5 hover:bg-brand-secondary/15 border border-brand-secondary/20 rounded-lg text-brand-secondary transition-colors"
+              >
+                🧗 Adventure
+              </button>
+            </div>
 
-        <div className="quick-replies">
-          <button onClick={() => sendMessage("Beach")}>⛱️ Beach</button>
-          <button onClick={() => sendMessage("Hill")}>⛰️ Hill</button>
-          <button onClick={() => sendMessage("Adventure")}>🧗 Adventure</button>
-        </div>
-
-        <div className="chat-input-area-adv">
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={isListening ? "Listening..." : "Ask travel AI..."}
-            onKeyDown={(e) => {
-              if(e.key === "Enter" && !loading) sendMessage();
-            }}
-            disabled={loading}
-          />
-          <button 
-            className={`mic-btn ${isListening ? 'listening_pulse' : ''}`} 
-            onClick={toggleListening}
-            title={isListening ? "Stop listening" : "Start Voice Input"}
-            style={{
-               background: isListening ? '#ef4444' : '#f1f5f9',
-               color: isListening ? '#fff' : '#64748b',
-               border: 'none',
-               borderRadius: '50%',
-               width: '36px',
-               height: '36px',
-               display: 'flex',
-               alignItems: 'center',
-               justifyContent: 'center',
-               cursor: 'pointer',
-               marginRight: '8px',
-               transition: 'background 0.3s'
-            }}
-          >
-            🎤
-          </button>
-          
-          {loading ? (
-             <button className="send-btn-adv stop-btn" onClick={stopGeneration} title="Stop Generate">
-                <span className="stop-icon">⬛</span>
-             </button>
-          ) : (
-             <button className="send-btn-adv" onClick={() => sendMessage()}>
-               ➤
-             </button>
-          )}
-        </div>
-
-      </div>
-    )}
-  </>
-);
+            {/* CHAT INPUT AREA */}
+            <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder={isListening ? "Listening..." : "Ask travel AI..."}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !loading) sendMessage();
+                }}
+                disabled={loading}
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary text-slate-800"
+              />
+              
+              <button 
+                className={`p-2 rounded-full border transition-all flex items-center justify-center shrink-0 ${isListening ? 'bg-red-500 border-red-500 animate-pulse text-white' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-brand-primary hover:bg-slate-100'}`} 
+                onClick={toggleListening}
+                title={isListening ? "Stop listening" : "Start Voice Input"}
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+              
+              {loading ? (
+                 <button 
+                   className="p-2 bg-brand-secondary hover:bg-blue-600 border border-brand-secondary text-white rounded-full transition-colors flex items-center justify-center shrink-0" 
+                   onClick={stopGeneration} 
+                   title="Stop generating"
+                 >
+                    <Square className="w-4 h-4 fill-white" />
+                 </button>
+              ) : (
+                 <button 
+                   className="p-2 bg-brand-secondary hover:bg-blue-600 border border-brand-secondary text-white rounded-full transition-colors flex items-center justify-center shrink-0" 
+                   onClick={() => sendMessage()}
+                 >
+                   <Send className="w-4 h-4" />
+                 </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
 }

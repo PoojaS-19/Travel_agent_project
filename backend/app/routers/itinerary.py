@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import json
 import os
-import google.generativeai as genai
+from app.services.groq_service import get_groq_response, get_groq_stream
 
 from app.database import get_db
 from app.models.schemas import ItineraryUpdate
@@ -18,9 +18,6 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["Itinerary & AI Chatbot"])
 
-# Initialize Gemini generative model
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel("gemini-flash-latest")
 
 # --- Helpers ---
 
@@ -83,12 +80,41 @@ def serialize_itinerary_with_access(itinerary: Itinerary, user_id: int, role: st
     except Exception as e:
         print("Error serializing collaborators in itinerary:", e)
 
+    current_visit_info = None
+    try:
+        from app.models.collaboration import TripVisit
+        current_dest_name = None
+        for day in (itinerary.daily_plans or []):
+            for act in day.get("activities", []):
+                if act.get("status") == "current":
+                    current_dest_name = act.get("place_name")
+                    break
+            if current_dest_name:
+                break
+        if current_dest_name:
+            from app.database import SessionLocal
+            db_session = SessionLocal()
+            try:
+                visit = db_session.query(TripVisit).filter_by(trip_id=itinerary.id, place_name=current_dest_name).first()
+                if visit:
+                    current_visit_info = {
+                        "place_name": visit.place_name,
+                        "status": visit.status,
+                        "arrived_at": visit.arrived_at.isoformat() + "Z" if visit.arrived_at else None,
+                        "left_at": visit.left_at.isoformat() + "Z" if visit.left_at else None,
+                    }
+            finally:
+                db_session.close()
+    except Exception as e:
+        print("Error fetching current visit info in itinerary serialization:", e)
+
     data.update({
         "owner_user_id": itinerary.user_id,
         "collaboration_role": access_role,
         "is_shared": itinerary.user_id != user_id,
         "can_edit": itinerary.user_id == user_id,
         "members": members,
+        "current_visit": current_visit_info,
     })
     return data
 
@@ -222,19 +248,7 @@ Now generate the JSON for the user's inputs.
         prompt_days = "The trip days (for your reference):\n" + "\n".join(day_headers) + "\n\nNow produce the JSON:\n\n"
         final_prompt = prompt_header + prompt_days
 
-        response = gemini_model.generate_content(final_prompt)
-
-        generated_content = ""
-        if hasattr(response, "text") and response.text:
-            generated_content = response.text
-        else:
-            try:
-                if isinstance(response, dict) and "candidates" in response and len(response["candidates"]) > 0:
-                    generated_content = response["candidates"][0].get("content", "")
-                else:
-                    generated_content = str(response)
-            except Exception:
-                generated_content = str(response)
+        generated_content = get_groq_response(final_prompt)
 
         try:
             clean_content = generated_content.strip()
@@ -279,7 +293,10 @@ Now generate the JSON for the user's inputs.
 
     except Exception as e:
         print("ERROR generating itinerary:", e)
-        return {"error": str(e)}
+        err_msg = str(e)
+        if "rate_limit" in err_msg.lower() or "429" in err_msg or "quota" in err_msg.lower():
+            return {"error": "AI quota exceeded. Please try again in a moment."}
+        return {"error": err_msg}
 
 @router.get("/itineraries")
 async def get_saved_itineraries(
@@ -500,8 +517,7 @@ INSTRUCTIONS — Read carefully:
 Now respond to the user's latest message as JSON:
 """
 
-        response = gemini_model.generate_content(prompt)
-        raw = response.text.strip()
+        raw = get_groq_response(prompt).strip()
 
         try:
             if raw.startswith("```json"):
@@ -539,7 +555,13 @@ Now respond to the user's latest message as JSON:
             return {"response_type": "chat", "reply": raw}
 
     except Exception as e:
-        return {"error": str(e)}
+        err_msg = str(e)
+        if "rate_limit" in err_msg.lower() or "429" in err_msg or "quota" in err_msg.lower():
+            return {
+                "response_type": "chat",
+                "reply": "⚠️ Myra is temporarily unavailable due to AI quota limits. Please try again shortly."
+            }
+        return {"error": err_msg}
 
 @router.post("/chatbot-stream")
 async def travel_chatbot_stream(
@@ -639,11 +661,9 @@ If the question is not travel-related, politely refuse.
     async def event_generator():
         full_text = ""
         try:
-            response = gemini_model.generate_content(prompt, stream=True)
-            for chunk in response:
-                if hasattr(chunk, 'text') and chunk.text:
-                    full_text += chunk.text
-                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+            for chunk in get_groq_stream(prompt):
+                full_text += chunk
+                yield f"data: {json.dumps({'text': chunk})}\n\n"
 
             # Parse and save streamed itinerary plan
             if user_id and "---JSON_START---" in full_text and "---JSON_END---" in full_text:
@@ -666,7 +686,11 @@ If the question is not travel-related, politely refuse.
 
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            err_msg = str(e)
+            if "rate_limit" in err_msg.lower() or "429" in err_msg or "quota" in err_msg.lower():
+                yield f"data: {json.dumps({'error': '⚠️ AI quota limit reached. Please try again shortly.'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'error': err_msg})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -734,8 +758,7 @@ The JSON structure must be exactly:
 }}
 """
     try:
-        response = gemini_model.generate_content(prompt)
-        raw = response.text.strip()
+        raw = get_groq_response(prompt).strip()
         
         if raw.startswith("```json"):
             raw = raw[7:]

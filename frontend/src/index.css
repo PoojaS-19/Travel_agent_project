@@ -1,88 +1,376 @@
-/* ===== Paste your FULL :root variables here ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-/* Example global usage */
-body {
-  margin: 0;
-  font-family: var(--ta-sans-serif);
-  background: var(--scheme-surface);
-  color: var(--scheme-on-surface);
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-bg text-brand-text antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+  
+  input, select, textarea {
+    @apply bg-white border border-slate-200 text-slate-900 rounded-lg focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none transition-all;
+  }
 }
 
-/* Navbar */
-.navbar {
-  background: var(--scheme-primary);
-  color: var(--scheme-on-primary);
-  padding: var(--gap-20);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.logo {
-  font: var(--adaptive-title-40-small);
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
 }
 
-.nav-links a {
-  margin-left: var(--gap-20);
-  text-decoration: none;
-  color: var(--scheme-on-primary);
-  font-weight: 600;
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-400 rounded-full hover:bg-slate-500 transition-colors;
 }
 
-/* Hero */
-.hero {
-  padding: var(--gap-60);
-  text-align: center;
-  background: linear-gradient(135deg,#e9f7ff,#ffffff);
+/* MakeMyTrip & ixigo layouts */
+.mmt-container {
+  @apply max-w-7xl mx-auto px-4 md:px-8 py-8;
 }
 
-.hero h1 {
-  font: var(--adaptive-display-10-large);
+.mmt-search-card {
+  @apply bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 relative mb-12;
 }
 
-.search-box {
-  margin-top: var(--gap-30);
+.mmt-search-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 border border-slate-200 rounded-xl overflow-hidden divide-y md:divide-y-0 md:divide-x divide-slate-200;
 }
 
-.search-box input {
-  padding: 12px;
-  width: 280px;
-  border-radius: var(--radius-large);
-  border: 1px solid #ccc;
+.mmt-input-segment {
+  @apply px-4 py-3 hover:bg-sky-50/30 transition-colors flex flex-col text-left cursor-pointer relative;
 }
 
-.search-box button {
-  margin-left: var(--gap-10);
-  padding: 12px 20px;
-  background: var(--scheme-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-large);
-  cursor: pointer;
+.mmt-input-segment label {
+  @apply text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1;
 }
 
-/* Cards */
-.card-container {
-  display: flex;
-  gap: var(--gap-30);
-  padding: var(--gap-40);
-  justify-content: center;
+.mmt-input-segment input, .mmt-input-segment select {
+  @apply w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:ring-0 focus:border-transparent outline-none placeholder-slate-400 !important;
 }
 
-.card {
-  width: 260px;
-  background: white;
-  border-radius: var(--radius-xlarge);
-  box-shadow: var(--shadow-medium);
-  overflow: hidden;
+.mmt-search-btn {
+  @apply absolute -bottom-6 left-1/2 -translate-x-1/2 px-12 py-3 bg-gradient-to-r from-brand-accent to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-extrabold text-base rounded-full shadow-lg shadow-orange-600/30 transition-all uppercase tracking-wider z-10 shrink-0 !important;
 }
 
-.card img {
-  width: 100%;
-  height: 170px;
-  object-fit: cover;
+/* Listings overrides (MMT style cards) */
+.flights-page, .hotels-page, .restaurants-page, .train-page-modern, .bus-page-modern, .saved-trips-page {
+  @apply py-8 px-4 md:px-8 max-w-7xl mx-auto space-y-6 relative z-10;
 }
 
-.card h3 {
-  padding: var(--gap-20);
+.flight-hero, .hotel-hero, .restaurant-hero, .train-hero, .bus-hero {
+  @apply text-center mb-8 py-8;
+}
+
+.flight-hero h1, .hotel-hero h1, .restaurant-hero h1, .train-hero h1, .bus-hero h1 {
+  @apply text-3xl md:text-4xl font-extrabold text-brand-primary tracking-tight mb-2;
+}
+
+.flight-hero p, .hotel-hero p, .restaurant-hero p, .train-hero p, .bus-hero p {
+  @apply text-sm text-slate-500 leading-normal;
+}
+
+.flight-results-enhanced, .hotel-results-enhanced, .restaurant-results-enhanced, .train-results-enhanced, .bus-results-enhanced {
+  @apply grid grid-cols-1 gap-4 mt-8 !important;
+}
+
+.flight-card-enhanced, .hotel-card-enhanced, .restaurant-card-enhanced, .train-card-enhanced, .bus-card-enhanced {
+  @apply bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-6 !important;
+}
+
+.card-header-row {
+  @apply flex items-center justify-between w-full md:w-auto border-b-0 pb-0 mb-0 gap-8;
+}
+
+.airline-info, .hotel-info, .restaurant-info {
+  @apply flex items-center gap-4;
+}
+
+.airline-logo-placeholder, .hotel-logo-placeholder {
+  @apply w-12 h-12 bg-sky-50 border border-sky-100 text-brand-secondary font-black rounded-xl flex items-center justify-center text-sm tracking-wider uppercase shrink-0;
+}
+
+.airline-name, .hotel-name, .restaurant-name {
+  @apply text-slate-900 font-extrabold text-base;
+}
+
+.flight-price, .hotel-price, .restaurant-price, .train-price, .bus-price {
+  @apply text-xl font-black text-brand-accent !important;
+}
+
+/* Route layout */
+.flight-route-row {
+  @apply flex items-center justify-center gap-8 w-full md:w-auto flex-1 px-8;
+}
+
+.route-point {
+  @apply flex flex-col gap-0.5 text-center min-w-[80px];
+}
+
+.route-time {
+  @apply text-lg font-black text-slate-900;
+}
+
+.route-city {
+  @apply text-xs text-slate-400 font-semibold uppercase tracking-wider;
+}
+
+.route-line {
+  @apply w-32 flex items-center justify-center relative;
+}
+
+.route-line::before {
+  @apply content-[""] w-full h-[2px] bg-slate-200 absolute;
+}
+
+.plane-icon {
+  @apply relative text-brand-secondary text-base bg-white px-2 z-10;
+}
+
+.duration-badge {
+  @apply bg-slate-100 border border-slate-200 text-slate-500 px-2.5 py-0.5 rounded-full text-[10px] font-bold z-10;
+}
+
+.book-btn-small {
+  @apply w-full md:w-40 py-2.5 bg-gradient-to-r from-brand-accent to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-lg text-xs font-black transition-all cursor-pointer text-center border-none shadow-sm shadow-orange-600/10 hover:shadow-orange-600/20 !important;
+}
+
+/* Leaflet map styling */
+.leaflet-container {
+  font-family: inherit !important;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  @apply bg-white text-slate-800 border border-slate-200 rounded-xl shadow-xl !important;
+}
+
+.leaflet-popup-tip {
+  @apply bg-white !important;
+}
+
+/* Autocomplete drops */
+.suggestions-dropdown, .autocomplete-dropdown {
+  @apply absolute left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto text-left;
+}
+
+.suggestion-item, .autocomplete-item {
+  @apply px-4 py-3 hover:bg-slate-50 text-slate-700 hover:text-slate-900 cursor-pointer transition-colors text-sm font-semibold border-b border-slate-100 last:border-none flex justify-between items-center;
+}
+
+.city-name, .autocomplete-station-name {
+  @apply text-slate-700 font-bold;
+}
+
+.city-code, .autocomplete-station-code {
+  @apply text-xs bg-sky-50 border border-sky-100 text-brand-secondary px-2 py-0.5 rounded font-bold;
+}
+
+/* Modals */
+.irctc-modal-overlay {
+  @apply fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[9999] px-4;
+}
+
+.irctc-modal {
+  @apply bg-white border border-slate-200 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl space-y-4;
+}
+
+.irctc-modal-icon {
+  @apply w-14 h-14 bg-sky-50 border border-sky-100 text-brand-secondary text-3xl font-bold rounded-full flex items-center justify-center mx-auto mb-4;
+}
+
+.irctc-modal h3 {
+  @apply text-lg font-black text-slate-900;
+}
+
+.irctc-modal p {
+  @apply text-xs text-slate-500 leading-relaxed;
+}
+
+.irctc-modal .modal-actions {
+  @apply flex gap-3 mt-6 pt-4 border-t border-slate-100;
+}
+
+.irctc-modal .cancel-btn {
+  @apply flex-1 py-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs font-bold rounded-lg transition-all;
+}
+
+.irctc-modal .continue-btn {
+  @apply flex-1 py-2 bg-brand-accent hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-all;
+}
+
+/* ==================== SAVED TRIPS PAGE OVERRIDES ==================== */
+
+.saved-trips-shell {
+  @apply grid grid-cols-1 lg:grid-cols-4 gap-8;
+}
+
+.saved-trips-sidebar {
+  @apply lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-6 h-fit space-y-6 shadow-sm;
+}
+
+.saved-trips-heading {
+  @apply flex justify-between items-center pb-4 border-b border-slate-100;
+}
+
+.saved-trips-heading h1 {
+  @apply text-xl font-extrabold text-slate-900;
+}
+
+.join-trip-otp-card {
+  @apply bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 !important;
+}
+
+.join-trip-otp-card h4 {
+  @apply text-xs font-bold uppercase tracking-wider text-slate-500 !important;
+}
+
+.saved-trip-list {
+  @apply flex flex-col gap-2;
+}
+
+.saved-trip-list-item {
+  @apply rounded-xl border border-slate-200 overflow-hidden hover:border-slate-300 transition-all !important;
+}
+
+.saved-trip-list-item.active {
+  @apply border-brand-secondary bg-sky-50/50 !important;
+}
+
+.saved-trip-list-main {
+  @apply w-full text-left p-3.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors bg-transparent border-none rounded-none cursor-pointer !important;
+}
+
+.saved-trip-detail {
+  @apply lg:col-span-3 space-y-6 bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm;
+}
+
+.saved-trip-detail-header {
+  @apply flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100;
+}
+
+.saved-trip-detail-header h2 {
+  @apply text-2xl font-black text-slate-900;
+}
+
+.saved-trip-detail-header p {
+  @apply text-xs text-slate-400 font-semibold mt-1;
+}
+
+.saved-trip-kicker {
+  @apply text-[10px] bg-sky-50 border border-sky-100 text-brand-secondary px-2.5 py-0.5 rounded-md font-bold uppercase tracking-widest inline-block mb-2 !important;
+}
+
+.saved-trip-shared-note {
+  @apply text-xs text-teal-600 bg-teal-50 border border-teal-100 px-3 py-2 rounded-lg my-2 font-semibold !important;
+}
+
+.saved-trip-actions {
+  @apply flex gap-2.5 flex-wrap mt-2;
+}
+
+.saved-trip-primary-btn {
+  @apply px-4 py-2 bg-brand-secondary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all cursor-pointer border-none !important;
+}
+
+.saved-trip-secondary-btn {
+  @apply px-4 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-800 rounded-lg text-xs font-bold transition-all cursor-pointer !important;
+}
+
+.saved-trip-danger-btn {
+  @apply px-4 py-2 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold transition-all cursor-pointer !important;
+}
+
+.saved-trip-stats {
+  @apply grid grid-cols-3 gap-4 border-y border-slate-100 py-6 my-6 text-center !important;
+}
+
+.saved-trip-stats div {
+  @apply flex flex-col gap-1;
+}
+
+.saved-trip-stats strong {
+  @apply text-xl md:text-2xl font-black text-slate-900 !important;
+}
+
+.saved-trip-stats span {
+  @apply text-[10px] uppercase tracking-wider text-slate-400 font-bold !important;
+}
+
+.saved-trip-summary {
+  @apply space-y-3 bg-slate-50 border border-slate-100 p-5 rounded-2xl shadow-inner;
+}
+
+.saved-trip-summary h3, .saved-trip-days h3 {
+  @apply text-sm font-extrabold text-slate-700 uppercase tracking-wider;
+}
+
+.saved-trip-summary p {
+  @apply text-xs text-slate-500 leading-relaxed;
+}
+
+.saved-trip-days {
+  @apply space-y-4 pt-6;
+}
+
+.saved-trip-day-card {
+  @apply bg-white border border-slate-200/80 hover:border-slate-300 rounded-2xl p-5 md:p-6 transition-all mb-4 !important;
+}
+
+.saved-trip-day-card h4 {
+  @apply text-sm font-extrabold text-slate-800 pb-3 border-b border-slate-100 mb-4;
+}
+
+.saved-trip-activity-list {
+  @apply flex flex-col gap-4;
+}
+
+.saved-trip-activity {
+  @apply flex gap-4 py-4 border-b border-slate-100 last:border-none !important;
+}
+
+.saved-trip-activity > span {
+  @apply text-xs font-bold text-brand-secondary shrink-0 w-20 !important;
+}
+
+.saved-trip-activity > div {
+  @apply flex-1 space-y-1.5 !important;
+}
+
+.saved-trip-activity strong {
+  @apply text-slate-800 font-bold text-sm !important;
+}
+
+.saved-trip-activity p {
+  @apply text-xs text-slate-500 leading-relaxed !important;
+}
+
+.saved-trip-activity small {
+  @apply text-[10px] text-slate-400 font-semibold !important;
+}
+
+.saved-trip-inline-btn {
+  @apply text-[11px] font-bold text-brand-secondary hover:text-blue-500 bg-transparent border-none p-0 mt-1 cursor-pointer transition-colors block !important;
+}
+
+.saved-place-edit-form, .saved-trip-edit-form {
+  @apply space-y-4 mt-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 !important;
+}
+
+.saved-trip-form-row {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4 !important;
+}
+
+.saved-trip-form-row label, .saved-place-edit-form label, .saved-trip-edit-form label {
+  @apply text-xs font-semibold uppercase tracking-wider text-slate-500 block space-y-1.5 !important;
+}
+
+.saved-trip-form-row input, .saved-place-edit-form input, .saved-trip-edit-form input, .saved-place-edit-form select, .saved-trip-edit-form select, .saved-place-edit-form textarea, .saved-trip-edit-form textarea {
+  @apply w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none transition-all !important;
 }

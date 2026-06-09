@@ -52,7 +52,7 @@ export default function ChatbotPage() {
       {/* HEADER */}
       <div className="assistant-header">
         <span className="assistant-icon">🤖</span>
-        <h2>TripAI Travel Assistant</h2>
+        <h2>Travel Trip Assistant</h2>
       </div>
 
       {/* CHAT AREA */}

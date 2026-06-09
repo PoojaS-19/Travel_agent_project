@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import API from "../api";
-import "../App.css";
+import { Compass, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function VerifyEmailPage() {
   const navigate = useNavigate();
@@ -44,7 +45,6 @@ export default function VerifyEmailPage() {
 
   const handleChange = (e, index) => {
     const val = e.target.value;
-    // Only allow digits
     if (val && !/^\d$/.test(val)) return;
 
     let newOtp = [...otp];
@@ -61,12 +61,10 @@ export default function VerifyEmailPage() {
     if (e.key === "Backspace") {
       let newOtp = [...otp];
       if (!otp[index] && index > 0) {
-        // If current is empty, clear previous and focus previous
         newOtp[index - 1] = "";
         setOtp(newOtp);
         inputRefs.current[index - 1]?.focus();
       } else {
-        // Clear current
         newOtp[index] = "";
         setOtp(newOtp);
       }
@@ -76,7 +74,7 @@ export default function VerifyEmailPage() {
   const handlePaste = (e) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData("text").trim();
-    if (!/^\d{6}$/.test(pastedData)) return; // Only allow 6 digits
+    if (!/^\d{6}$/.test(pastedData)) return;
 
     const newOtp = pastedData.split("");
     setOtp(newOtp);
@@ -165,17 +163,27 @@ export default function VerifyEmailPage() {
   const isBlocked = attempts >= 3;
 
   return (
-    <div className="auth-page">
-      <div className="auth-container">
-        <h2>Verify Your Email</h2>
-        <p style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}>
-          We've sent a 6-digit verification code to your email. Please enter it below.
-        </p>
+    <div className="w-full min-h-[calc(100vh-73px)] flex items-center justify-center px-4 py-12 bg-brand-bg">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-md bg-white p-8 rounded-2xl border border-slate-200 shadow-xl"
+      >
+        <div className="text-center mb-6">
+          <div className="inline-flex p-3 bg-sky-50 border border-sky-100 text-brand-secondary rounded-2xl mb-4">
+            <Compass className="w-7 h-7" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Verify Your Email</h2>
+          <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+            We've sent a 6-digit verification code to <strong>{email || "your email"}</strong>.
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {!emailParam && (
-            <div className="form-group">
-              <label htmlFor="email">Email Address</label>
+            <div className="space-y-1.5 text-left">
+              <label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-500">Email Address</label>
               <input
                 type="email"
                 id="email"
@@ -185,15 +193,16 @@ export default function VerifyEmailPage() {
                 required
                 placeholder="Enter your email"
                 disabled={loading || resending || isBlocked}
+                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none transition-all text-slate-900"
               />
             </div>
           )}
 
-          <div className="form-group">
-            <label style={{ display: "block", marginBottom: "12px", textAlign: "center", fontWeight: "600", color: "#333" }}>
+          <div className="space-y-2 text-center">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
               Verification Code
             </label>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", margin: "10px 0 20px" }}>
+            <div className="flex justify-between gap-2.5 py-1">
               {otp.map((digit, idx) => (
                 <input
                   key={idx}
@@ -205,49 +214,46 @@ export default function VerifyEmailPage() {
                   onKeyDown={(e) => handleKeyDown(e, idx)}
                   onPaste={idx === 0 ? handlePaste : undefined}
                   disabled={loading || resending || isBlocked}
+                  className="w-12 h-12 text-center text-xl font-bold rounded-xl border focus:ring-1 focus:ring-brand-secondary outline-none transition-all bg-white text-slate-900"
                   style={{
-                    width: "48px",
-                    height: "48px",
-                    textAlign: "center",
-                    fontSize: "22px",
-                    fontWeight: "bold",
-                    borderRadius: "8px",
-                    border: isBlocked ? "2px solid #fecaca" : "2px solid #e1e1e1",
-                    outline: "none",
-                    transition: "border-color 0.2s, box-shadow 0.2s",
-                    boxSizing: "border-box",
+                    borderColor: isBlocked ? "#fecaca" : "#cbd5e1",
                     backgroundColor: isBlocked ? "#fef2f2" : "#ffffff",
-                  }}
-                  onFocus={(e) => {
-                    if (!isBlocked) {
-                      e.target.style.borderColor = "#0073de";
-                      e.target.style.boxShadow = "0 0 0 3px rgba(0, 115, 222, 0.1)";
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = isBlocked ? "#fecaca" : "#e1e1e1";
-                    e.target.style.boxShadow = "none";
                   }}
                 />
               ))}
             </div>
           </div>
 
-          {error && <div className="error-message">{error}</div>}
-          {message && <div className="success-message">{message}</div>}
+          {error && (
+            <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 text-rose-600 p-3.5 rounded-xl text-xs font-bold">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span className="text-left">{error}</span>
+            </div>
+          )}
 
-          <button type="submit" disabled={loading || resending || isBlocked || otp.includes("")} className="auth-button">
+          {message && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-700 p-3.5 rounded-xl text-xs font-semibold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="text-left">{message}</span>
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={loading || resending || isBlocked || otp.includes("")} 
+            className="w-full py-3 bg-gradient-to-r from-brand-accent to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-extrabold rounded-xl shadow-md disabled:opacity-50 transition-all text-xs uppercase tracking-wider cursor-pointer border-none"
+          >
             {loading ? "Verifying..." : "Verify & Log In"}
           </button>
         </form>
 
-        <div className="auth-links" style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+        <div className="mt-8 text-center flex flex-col gap-3 items-center text-xs text-slate-500">
           {timer > 0 ? (
-            <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+            <p>
               Resend code in <strong>{timer}s</strong>
             </p>
           ) : resendCount >= 2 ? (
-            <p style={{ margin: 0, fontSize: "14px", color: "#dc2626", fontWeight: "600" }}>
+            <p className="text-rose-600 font-bold">
               If you did not get the code, please try again later.
             </p>
           ) : (
@@ -255,26 +261,17 @@ export default function VerifyEmailPage() {
               type="button"
               onClick={handleResend}
               disabled={loading || resending}
-              style={{
-                background: "none",
-                border: "none",
-                color: resending ? "#999" : "#0073de",
-                textDecoration: resending ? "none" : "underline",
-                cursor: resending ? "not-allowed" : "pointer",
-                fontSize: "14px",
-                fontWeight: "500",
-                padding: 0,
-              }}
+              className="bg-transparent border-none text-brand-secondary font-bold hover:underline cursor-pointer p-0"
             >
               {resending ? "Resending Verification Code..." : "Resend Verification Code"}
             </button>
           )}
 
-          <p style={{ margin: "5px 0 0", fontSize: "14px" }}>
-            Wrong email address? <Link to="/signup">Change email ID</Link>
+          <p>
+            Wrong email address? <Link to="/signup" className="text-brand-secondary font-bold hover:underline">Change email ID</Link>
           </p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
