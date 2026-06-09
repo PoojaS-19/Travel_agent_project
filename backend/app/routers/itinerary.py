@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
 import json
+from json_repair import repair_json
 import os
 from app.services.groq_service import get_groq_response, get_groq_stream
 
@@ -221,11 +222,10 @@ For "itinerary_text", follow these rules exactly:
 5) Keep each DAY to 6–9 bullets (include travel times in parentheses where applicable).
 6) Provide local tips, typical costs (approx), and travel time estimates for transfers.
 7) Use the same bullet format as the example below.
+8) CRITICAL: Escape all newlines in the `itinerary_text` field using `\\n`. DO NOT use literal newlines inside the JSON string.
 
 EXAMPLE TEXT STYLE (for itinerary_text field):
-DAY 1: BEACH ARRIVAL (2025-04-11)
-• 09:00 – 10:00: Arrive & check-in at Hotel (allow 30 min to luggage drop).
-• 10:00 – 13:00: Relax on Calangute Beach (sunbathe, swim).
+DAY 1: BEACH ARRIVAL (2025-04-11)\\n• 09:00 – 10:00: Arrive & check-in at Hotel (allow 30 min to luggage drop).\\n• 10:00 – 13:00: Relax on Calangute Beach (sunbathe, swim).
 • 13:00 – 14:00: Lunch at beachside restaurant (₹300–₹500).
 • 14:00 – 15:00: Rent a scooter (expect ~₹300–₹500/day).
 • 15:00 – 18:00: Explore Baga Beach (short ride, ~15 min).
@@ -259,7 +259,7 @@ Now generate the JSON for the user's inputs.
             if clean_content.endswith("```"):
                 clean_content = clean_content[:-3]
             
-            data = json.loads(clean_content)
+            data = repair_json(clean_content, return_objects=True)
             if isinstance(data, dict) and "daily_plans" in data:
                 data["daily_plans"] = normalize_daily_plans(data["daily_plans"])
 
@@ -526,7 +526,7 @@ Now respond to the user's latest message as JSON:
                 raw = raw[3:]
             if raw.endswith("```"):
                 raw = raw[:-3]
-            parsed = json.loads(raw.strip())
+            parsed = repair_json(raw.strip(), return_objects=True)
 
             # Save generated plan
             if user_id and isinstance(parsed, dict):
@@ -669,7 +669,7 @@ If the question is not travel-related, politely refuse.
             if user_id and "---JSON_START---" in full_text and "---JSON_END---" in full_text:
                 try:
                     json_text = full_text.split("---JSON_START---", 1)[1].split("---JSON_END---", 1)[0].strip()
-                    plan_data = json.loads(json_text)
+                    plan_data = repair_json(json_text, return_objects=True)
                     if isinstance(plan_data, dict) and plan_data.get("destination") and plan_data.get("daily_plans"):
                         ItineraryService.create_itinerary(
                             db=db,
@@ -767,7 +767,7 @@ The JSON structure must be exactly:
         if raw.endswith("```"):
             raw = raw[:-3]
             
-        parsed = json.loads(raw.strip())
+        parsed = repair_json(raw.strip(), return_objects=True)
         parsed["itinerary_text"] = itinerary_text + "\n" + parsed.get("itinerary_text", "")
         if "daily_plans" in parsed:
             parsed["daily_plans"] = normalize_daily_plans(parsed["daily_plans"])

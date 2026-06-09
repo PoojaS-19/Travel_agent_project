@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import API, { API_BASE_URL } from "../api";
 import "../App.css";
 import MapComponent from "../components/MapComponent";
+import TravelJournal from "../components/TravelJournal";
 import { CITIES } from "../data/cities";
 import html2pdf from "html2pdf.js";
 import { 
@@ -1331,6 +1332,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       </div>
         )}
       </div>
+
+      {/* TRAVEL JOURNAL */}
+      {savedTripId && (
+        <TravelJournal itineraryId={savedTripId} />
+      )}
 
       {/* ALTERNATIVE DETAILS DIALOG MODAL */}
       <AnimatePresence>

@@ -14,6 +14,7 @@ from app.routers.reviews import router as reviews_router
 from app.routers.collaboration import router as collaboration_router, websocket_trip_endpoint
 from app.routers.itinerary import router as itinerary_router
 from app.routers.buses import router as buses_router
+from app.routers.journal import router as journal_router
 
 app = FastAPI(
     title="Travel Trip",
@@ -92,6 +93,7 @@ app.include_router(reviews_router, prefix="/api")
 app.include_router(collaboration_router)
 app.include_router(itinerary_router)
 app.include_router(buses_router)
+app.include_router(journal_router)
 
 # --- WebSocket Route Registration ---
 app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)

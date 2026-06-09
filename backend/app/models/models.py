@@ -140,6 +140,7 @@ class Itinerary(Base):
     invitations = relationship("TripInvitation", back_populates="trip", cascade="all, delete-orphan")
     suggestions = relationship("TripSuggestion", back_populates="trip", cascade="all, delete-orphan")
     notifications = relationship("TripNotification", back_populates="trip", cascade="all, delete-orphan")
+    journals = relationship("TravelJournal", back_populates="itinerary", cascade="all, delete-orphan")
 
     # Index hint: user_id
 
@@ -233,3 +234,20 @@ class PlaceReview(Base):
 
 # Add to User model
 User.place_reviews = relationship("PlaceReview", back_populates="user", cascade="all, delete-orphan")
+User.journals = relationship("TravelJournal", back_populates="user", cascade="all, delete-orphan")
+
+class TravelJournal(Base):
+    __tablename__ = "travel_journals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    itinerary_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    note = Column(Text, nullable=True)
+    photo_url = Column(Text, nullable=True) # Will store base64 or file path
+    location_name = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="journals")
+    itinerary = relationship("Itinerary", back_populates="journals")
+

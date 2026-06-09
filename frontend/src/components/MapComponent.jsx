@@ -1,6 +1,8 @@
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { antPath } from "leaflet-ant-path";
 import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 
@@ -10,6 +12,9 @@ let DefaultIcon = L.icon({
     shadowUrl: iconShadow,
     iconSize: [25, 41],
     iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
+    shadowSize: [41, 41]
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
@@ -30,17 +35,18 @@ const createNumberedIcon = (number, color) => {
         <div style="
             background-color: ${color};
             color: white;
-            width: 26px;
-            height: 26px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
             font-size: 14px;
-            border: 2px solid white;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-            font-family: inherit;
+            border: 3px solid white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
         ">
             ${number}
         </div>
@@ -48,11 +54,40 @@ const createNumberedIcon = (number, color) => {
     return L.divIcon({
         className: 'custom-numbered-marker',
         html: html,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-        popupAnchor: [0, -13]
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14]
     });
 };
+
+// Custom Animated Route Component
+function AnimatedRoute({ positions, color, isMasterMap }) {
+    const map = useMap();
+    useEffect(() => {
+        if (!positions || positions.length < 2) return;
+        
+        const path = antPath(positions, {
+            color: color,
+            pulseColor: "#FFFFFF",
+            delay: isMasterMap ? 600 : 400,
+            dashArray: [10, 20],
+            weight: isMasterMap ? 4 : 5,
+            opacity: 0.8,
+            hardwareAccelerated: true,
+            paused: false,
+            reverse: false
+        });
+        
+        path.addTo(map);
+        
+        return () => {
+            if (map && path) {
+                map.removeLayer(path);
+            }
+        };
+    }, [map, positions, color, isMasterMap]);
+    return null;
+}
 
 export default function MapComponent({ activities, allDailyPlans }) {
     // If neither is provided, don't render
@@ -83,15 +118,15 @@ export default function MapComponent({ activities, allDailyPlans }) {
         }
     }
 
-    if (mapData.length === 0) return <p>No valid map data available with coordinates.</p>;
+    if (mapData.length === 0) return <p className="text-slate-500 italic p-4 text-center">No valid coordinates found to display the map.</p>;
 
     // Calculate bounds to fit all points
     let allLats = [];
     let allLons = [];
     mapData.forEach(block => {
         block.activities.forEach(act => {
-            allLats.push(act.lat);
-            allLons.push(act.lon);
+            allLats.push(parseFloat(act.lat));
+            allLons.push(parseFloat(act.lon));
         });
     });
 
@@ -124,49 +159,55 @@ export default function MapComponent({ activities, allDailyPlans }) {
 
     return (
         <div style={{ marginTop: "20px", marginBottom: "30px", width: "100%" }}>
-            {isMasterMap && <h3 style={{marginBottom: '15px'}}>🗺️ Full Trip Interactive Map</h3>}
+            {isMasterMap && <h3 style={{marginBottom: '15px', color: '#0f172a', fontWeight: 'bold'}}>🗺️ Full Trip Interactive Map</h3>}
             <div style={{ 
                 height: isMasterMap ? "500px" : "350px", 
                 width: "100%", 
-                borderRadius: "12px", 
+                borderRadius: "16px", 
                 overflow: "hidden", 
                 marginBottom: "15px", 
-                boxShadow: "0 4px 6px rgba(0,0,0,0.1)" 
+                boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+                border: "1px solid #e2e8f0"
             }}>
                 <MapContainer 
                     bounds={bounds} 
                     style={{ height: "100%", width: "100%", zIndex: 1 }}
                     scrollWheelZoom={true}
                 >
+                    {/* Modern premium tileset from CartoDB Voyager */}
                     <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                     />
                     
                     {mapData.map((block, blockIdx) => {
-                        const positions = block.activities.map(act => [act.lat, act.lon]);
+                        const positions = block.activities.map(act => [parseFloat(act.lat), parseFloat(act.lon)]);
                         return (
                             <div key={`day-block-${blockIdx}`}>
                                 {block.activities.map((act, actIdx) => (
                                     <Marker 
                                         key={`marker-${blockIdx}-${actIdx}`} 
-                                        position={[act.lat, act.lon]}
+                                        position={[parseFloat(act.lat), parseFloat(act.lon)]}
                                         icon={isMasterMap ? createNumberedIcon(actIdx + 1, block.color) : DefaultIcon}
                                     >
-                                        <Popup>
-                                            <strong>{isMasterMap ? `${block.dayInfo} - ` : ''}{act.place_name}</strong>
-                                            <br />
-                                            {act.description}
+                                        <Popup className="custom-popup">
+                                            <div className="p-1">
+                                                <strong className="text-slate-900 block mb-1 text-sm">
+                                                    {isMasterMap ? <span style={{color: block.color}}>{block.dayInfo}</span> : ''}
+                                                    {isMasterMap ? ' - ' : ''}{act.place_name}
+                                                </strong>
+                                                <p className="text-xs text-slate-600 m-0 leading-relaxed line-clamp-3">
+                                                    {act.description}
+                                                </p>
+                                            </div>
                                         </Popup>
                                     </Marker>
                                 ))}
                                 {positions.length > 1 && (
-                                    <Polyline 
+                                    <AnimatedRoute 
                                         positions={positions} 
                                         color={block.color} 
-                                        weight={isMasterMap ? 4 : 5} 
-                                        opacity={0.8} 
-                                        dashArray={isMasterMap ? "8, 10" : null}
+                                        isMasterMap={isMasterMap} 
                                     />
                                 )}
                             </div>
@@ -180,22 +221,8 @@ export default function MapComponent({ activities, allDailyPlans }) {
                     href={googleMapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "12px 24px",
-                        backgroundColor: "#4285F4",
-                        color: "white",
-                        textDecoration: "none",
-                        borderRadius: "8px",
-                        fontWeight: "600",
-                        fontSize: "16px",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                        transition: "background-color 0.2s"
-                    }}
-                    onMouseOver={(e) => e.target.style.backgroundColor = "#3367d6"}
-                    onMouseOut={(e) => e.target.style.backgroundColor = "#4285F4"}
+                    className="inline-flex items-center justify-center px-6 py-3 bg-brand-secondary hover:bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md transition-all duration-200"
+                    style={{ textDecoration: 'none' }}
                 >
                     📍 Open Route in Google Maps
                 </a>

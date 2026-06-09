@@ -6,7 +6,7 @@ load_dotenv(override=True)
 
 # Initialize Groq client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
@@ -22,7 +22,7 @@ def get_groq_response(prompt: str) -> str:
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
-        max_tokens=8192,
+        max_tokens=2500,
     )
     return completion.choices[0].message.content
 
@@ -38,7 +38,7 @@ def get_groq_stream(prompt: str):
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
-        max_tokens=8192,
+        max_tokens=2500,
         stream=True,
     )
     for chunk in stream:

@@ -39,7 +39,7 @@ def get_restaurants(city: str, user_id: int = Depends(get_current_user_id)):
     return results
 
 @router.get("/place-image")
-def get_place_image(place: str, index: int = 0, user_id: int = Depends(get_current_user_id)):
+def get_place_image(place: str, index: int = 0):
     """
     Fetch a single place photo by index using Google Places photo reference.
     Streams back the image directly to the client.
@@ -58,7 +58,7 @@ def get_place_image(place: str, index: int = 0, user_id: int = Depends(get_curre
     raise HTTPException(status_code=404, detail="No image found for the specified place")
 
 @router.get("/place-image-count")
-def get_place_image_count(place: str, user_id: int = Depends(get_current_user_id)):
+def get_place_image_count(place: str):
     """
     Returns the count of available photos for a place (max 3).
     """
