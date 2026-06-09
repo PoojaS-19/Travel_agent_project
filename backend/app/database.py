@@ -5,7 +5,7 @@ import os
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 
 # MySQL Database Configuration

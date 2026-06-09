@@ -6,7 +6,7 @@ continue to work without any changes.
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 from app.services.groq_service import get_groq_response as _groq_response, get_groq_stream as _groq_stream
 

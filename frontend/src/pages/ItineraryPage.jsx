@@ -8,7 +8,8 @@ import { CITIES } from "../data/cities";
 import html2pdf from "html2pdf.js";
 import { 
   Sparkles, MapPin, Calendar, FileText, Check, Copy, Download, 
-  Plus, X, Star, Navigation, Heart, ChevronLeft, ChevronRight, Info 
+  Plus, X, Star, Navigation, Heart, ChevronLeft, ChevronRight, Info,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -393,6 +394,18 @@ function ReviewForm({ place, destination, onClose }) {
     </div>
   );
 }
+
+const PREFERENCE_SUGGESTIONS = [
+  "Vegetarian diet",
+  "Low walking intensity",
+  "Museums first",
+  "Kid friendly",
+  "Senior friendly",
+  "Budget friendly",
+  "Photography spots",
+  "Local cuisine",
+  "Shopping hotspots"
+];
 
 export default function ItineraryPage({ language, chatItinerary, chatDailyPlans }) {
   const navigate = useNavigate();
@@ -807,6 +820,25 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     alert(`${suggestion.place_name} added to your itinerary!`);
   };
 
+  const togglePreference = (pref) => {
+    let currentPrefs = form.preferences
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const lowercasePrefs = currentPrefs.map((p) => p.toLowerCase());
+    const targetLower = pref.toLowerCase();
+
+    if (lowercasePrefs.includes(targetLower)) {
+      const matchIndex = lowercasePrefs.indexOf(targetLower);
+      if (matchIndex > -1) {
+        currentPrefs.splice(matchIndex, 1);
+      }
+    } else {
+      currentPrefs.push(pref);
+    }
+    setForm({ ...form, preferences: currentPrefs.join(", ") });
+  };
+
   return (
     <div className="relative min-h-screen px-4 py-8 md:px-12 md:py-12 max-w-7xl mx-auto space-y-8">
       {/* HEADER SECTION */}
@@ -900,21 +932,61 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
               className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
             />
           </div>
-          <input
-            placeholder="Theme (e.g. Adventure, Relax, Heritage)"
-            value={form.theme}
-            onChange={(e) => setForm({ ...form, theme: e.target.value })}
-            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
-          />
+          <div className="relative w-full">
+            <select
+              value={form.theme}
+              onChange={(e) => setForm({ ...form, theme: e.target.value })}
+              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all cursor-pointer appearance-none"
+            >
+              <option value="" disabled hidden>Theme (e.g. Adventure, Relax, Heritage)</option>
+              <option value="Not Specific">Not Specific</option>
+              <option value="General">General / All-round</option>
+              <option value="Adventure">Adventure & Sports</option>
+              <option value="Relaxation">Relaxation & Wellness</option>
+              <option value="Heritage">Heritage & Culture</option>
+              <option value="Nature">Nature & Scenic</option>
+              <option value="Beaches">Beaches & Coastal</option>
+              <option value="Mountains">Mountains & Trekking</option>
+              <option value="Food & Culinary">Food & Culinary</option>
+              <option value="Wildlife & Safari">Wildlife & Safari</option>
+              <option value="Spiritual & Religious">Spiritual & Religious</option>
+              <option value="Budget Travel">Budget Travel</option>
+              <option value="Luxury & Leisure">Luxury & Leisure</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
         </div>
 
-        <textarea
-          placeholder="Additional Preferences (e.g. Vegetarian diet, low walking intensity, museums first)"
-          value={form.preferences}
-          onChange={(e) => setForm({ ...form, preferences: e.target.value })}
-          rows={3}
-          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
-        />
+        <div className="space-y-2 text-left">
+          <textarea
+            placeholder="Additional Preferences (e.g. Vegetarian diet, low walking intensity, museums first)"
+            value={form.preferences}
+            onChange={(e) => setForm({ ...form, preferences: e.target.value })}
+            rows={3}
+            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all"
+          />
+          <div className="flex flex-wrap gap-2 pt-1">
+            {PREFERENCE_SUGGESTIONS.map((pref, idx) => {
+              const isActive = form.preferences.toLowerCase().includes(pref.toLowerCase());
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => togglePreference(pref)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                    isActive
+                      ? "bg-brand-secondary border-brand-secondary text-white shadow-sm"
+                      : "bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100 hover:border-slate-300"
+                  }`}
+                >
+                  {isActive ? "✓ " : "+ "} {pref}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <button 
           onClick={submit}

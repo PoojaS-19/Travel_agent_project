@@ -96,5 +96,4 @@ app.include_router(buses_router)
 # --- WebSocket Route Registration ---
 app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)
 
-# Reload trigger comment (PostgreSQL restored)
-
+# Reload trigger comment (PostgreSQL SSL mode and load_dotenv override configured) & GROQ_API_KEY added)

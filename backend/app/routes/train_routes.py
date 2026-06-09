@@ -141,6 +141,112 @@ def calculate_dynamic_duration(dep_time_str, arr_time_str, dep_day, arr_day):
     except:
         return "N/A", 999999
 
+def resolve_fuzzy_station(query: str, db: Session) -> Optional[tuple[str, str]]:
+    """
+    Given a query, find the single best matching station (name, code) using exact
+    substring check first, falling back to a vowel-insensitive wildcard search ranked by similarity.
+    """
+    if not query:
+        return None
+        
+    query_clean = query.strip().upper()
+    if len(query_clean) < 2:
+        return None
+        
+    # 1. Try exact match (equality)
+    exact_match = db.query(TrainStop.station_name, TrainStop.station_code).\
+        filter(
+            (TrainStop.station_name.ilike(query_clean)) | 
+            (TrainStop.station_code.ilike(query_clean))
+        ).\
+        first()
+    if exact_match:
+        return exact_match.station_name, exact_match.station_code
+
+    # 2. Try prefix match (starts with query)
+    prefix_match = db.query(TrainStop.station_name, TrainStop.station_code).\
+        filter(
+            (TrainStop.station_name.ilike(f"{query_clean}%")) | 
+            (TrainStop.station_code.ilike(f"{query_clean}%"))
+        ).\
+        first()
+    if prefix_match:
+        return prefix_match.station_name, prefix_match.station_code
+
+    # 3. Find all matches containing the query as substring, rank them
+    import difflib
+    results = db.query(TrainStop.station_name, TrainStop.station_code).\
+        filter(
+            (TrainStop.station_name.ilike(f"%{query_clean}%")) | 
+            (TrainStop.station_code.ilike(f"%{query_clean}%"))
+        ).\
+        distinct().\
+        limit(100).\
+        all()
+        
+    if results:
+        best_match = None
+        best_score = -1.0
+        for r in results:
+            name_score = difflib.SequenceMatcher(None, query_clean, r.station_name.upper()).ratio()
+            code_score = difflib.SequenceMatcher(None, query_clean, r.station_code.upper()).ratio()
+            score = max(name_score, code_score)
+            
+            # Boost if name starts with query
+            if r.station_name.upper().startswith(query_clean):
+                score += 0.3
+            # Boost if exact word match
+            words = r.station_name.upper().replace("-", " ").replace("(", " ").replace(")", " ").split()
+            if query_clean in words:
+                score += 0.2
+                
+            if score > best_score:
+                best_score = score
+                best_match = (r.station_name, r.station_code)
+        if best_match:
+            return best_match
+
+    # 4. Fallback to vowel-insensitive fuzzy wildcard
+    vowels = "aeiouy"
+    chars = []
+    for char in query_clean.lower():
+        if char in vowels:
+            if not chars or chars[-1] != '%':
+                chars.append('%')
+        else:
+            chars.append(char)
+    pattern = "%" + "%".join(chars) + "%"
+    while "%%" in pattern:
+        pattern = pattern.replace("%%", "%")
+        
+    results = db.query(TrainStop.station_name, TrainStop.station_code).\
+        filter(
+            (TrainStop.station_name.ilike(pattern)) | 
+            (TrainStop.station_code.ilike(pattern))
+        ).\
+        distinct().\
+        limit(100).\
+        all()
+        
+    if not results:
+        return None
+        
+    best_match = None
+    best_score = -1.0
+    for r in results:
+        name_score = difflib.SequenceMatcher(None, query_clean, r.station_name.upper()).ratio()
+        code_score = difflib.SequenceMatcher(None, query_clean, r.station_code.upper()).ratio()
+        score = max(name_score, code_score)
+        
+        if r.station_name.upper().startswith(query_clean[0]):
+            score += 0.2
+            
+        if score > best_score:
+            best_score = score
+            best_match = (r.station_name, r.station_code)
+            
+    return best_match
+
 @router.get("/stations")
 def search_stations(
     query: str = Query(..., min_length=2, description="Search term for station name or code"),
@@ -149,6 +255,7 @@ def search_stations(
     """
     Search distinct stations by name or code for autocomplete suggestions
     """
+    # 1. Try exact search
     results = db.query(TrainStop.station_name, TrainStop.station_code).\
         filter(
             (TrainStop.station_name.ilike(f"%{query}%")) | 
@@ -158,11 +265,62 @@ def search_stations(
         limit(15).\
         all()
         
+    results_list = list(results)
+
+    # 2. If results are empty or fewer than 5, try fuzzy fallback
+    if len(results_list) < 5:
+        import difflib
+        vowels = "aeiouy"
+        chars = []
+        for char in query.lower():
+            if char in vowels:
+                if not chars or chars[-1] != '%':
+                    chars.append('%')
+            else:
+                chars.append(char)
+        pattern = "%" + "%".join(chars) + "%"
+        while "%%" in pattern:
+            pattern = pattern.replace("%%", "%")
+            
+        fuzzy_results = db.query(TrainStop.station_name, TrainStop.station_code).\
+            filter(
+                (TrainStop.station_name.ilike(pattern)) | 
+                (TrainStop.station_code.ilike(pattern))
+            ).\
+            distinct().\
+            limit(150).\
+            all()
+            
+        # Rank the fuzzy results
+        ranked_results = []
+        existing_codes = {r.station_code.upper() for r in results_list}
+        
+        for r in fuzzy_results:
+            if r.station_code.upper() in existing_codes:
+                continue
+            name_score = difflib.SequenceMatcher(None, query.upper(), r.station_name.upper()).ratio()
+            code_score = difflib.SequenceMatcher(None, query.upper(), r.station_code.upper()).ratio()
+            score = max(name_score, code_score)
+            
+            # Boost if name starts with the same letter
+            if r.station_name and r.station_name.upper().startswith(query[0].upper()):
+                score += 0.2
+                
+            ranked_results.append((r, score))
+            
+        ranked_results.sort(key=lambda x: x[1], reverse=True)
+        
+        # Add top fuzzy matches to fill up to 15 suggestions
+        for r, score in ranked_results:
+            if len(results_list) >= 15:
+                break
+            results_list.append(r)
+            
     stations_list = [
         {
             "name": r.station_name.title(),
             "code": r.station_code.upper()
-        } for r in results
+        } for r in results_list
     ]
     return {"stations": stations_list}
 
@@ -182,22 +340,29 @@ def search_trains(
     import random
     from datetime import datetime, timedelta
 
+    # 1. Resolve source and destination to their best station codes/names
+    resolved_src = resolve_fuzzy_station(source, db)
+    resolved_dest = resolve_fuzzy_station(destination, db)
+    
+    if not resolved_src or not resolved_dest:
+        src_name, src_code = source.title(), source.upper()
+        dest_name, dest_code = destination.title(), destination.upper()
+    else:
+        src_name, src_code = resolved_src
+        dest_name, dest_code = resolved_dest
+
     TRAIN_API_KEY = os.getenv("TRAIN_API_KEY")
     TRAIN_API_URL = os.getenv("TRAIN_API_URL", "https://irctc-insight.p.rapidapi.com")
 
-    # If the search term is clean (e.g. "BCT", "NDLS"), try hitting RapidAPI
-    # We assume if length <= 4, it might be a code
-    if TRAIN_API_KEY and len(source) <= 5 and len(destination) <= 5:
+    # If we have resolved codes, try hitting RapidAPI
+    if TRAIN_API_KEY:
         try:
             headers = {
                 "x-rapidapi-key": TRAIN_API_KEY,
                 "x-rapidapi-host": "irctc-insight.p.rapidapi.com"
             }
             url = f"{TRAIN_API_URL}/trainBetweenStations"
-            # Format date as dd-mm-yyyy for IRCTC API usually, but let's check
-            # Often it's DD-MM-YYYY or not strictly required if generic
-            # Let's just use the query params
-            querystring = {"fromStnCode": source.upper(), "toStnCode": destination.upper(), "date": date}
+            querystring = {"fromStnCode": src_code, "toStnCode": dest_code, "date": date}
             response = requests.get(url, headers=headers, params=querystring, timeout=5)
             
             if response.status_code == 200:
@@ -205,19 +370,18 @@ def search_trains(
                 if isinstance(data, dict) and "data" in data:
                     api_trains = []
                     for t in data["data"]:
-                        # Extract real-time fields
                         api_trains.append({
                             "id": f"API-{t.get('trainNo', random.randint(1000, 9999))}",
                             "train_number": t.get("trainNo", "N/A"),
                             "name": t.get("trainName", "Unknown Express").title(),
-                            "source": f"{t.get('fromStnName', source)} ({t.get('fromStnCode', source).upper()})",
-                            "destination": f"{t.get('toStnName', destination)} ({t.get('toStnCode', destination).upper()})",
+                            "source": f"{t.get('fromStnName', src_name)} ({t.get('fromStnCode', src_code).upper()})",
+                            "destination": f"{t.get('toStnName', dest_name)} ({t.get('toStnCode', dest_code).upper()})",
                             "departure": t.get("departureTime", "00:00"),
                             "arrival": t.get("arrivalTime", "00:00"),
                             "duration": t.get("duration", "N/A"),
                             "type": "Express",
                             "running_days": {},
-                            "live_status": random.choice(["On Time", "Delayed 15m", "Delayed 5m"]) # Mock live status
+                            "live_status": random.choice(["On Time", "Delayed 15m", "Delayed 5m"])
                         })
                     if len(api_trains) > 0:
                         if sort == "departure":
@@ -225,24 +389,13 @@ def search_trains(
                         return {"trains": api_trains[:30], "count": len(api_trains), "source": "rapidapi"}
         except Exception as e:
             print(f"RapidAPI Fetch Failed: {e}")
-            pass # Fall back to Database
+            pass
 
     # Database Fallback Logic
-    # Create aliases to query source and destination stops
+    # Query trains going through both stops where source comes before destination
     src_stop = aliased(TrainStop)
     dest_stop = aliased(TrainStop)
     
-    # Check if 'source' and 'destination' correspond to exact station codes
-    source_upper = source.upper()
-    dest_upper = destination.upper()
-    
-    source_is_code = db.query(TrainStop.id).filter(TrainStop.station_code == source_upper).first() is not None
-    dest_is_code = db.query(TrainStop.id).filter(TrainStop.station_code == dest_upper).first() is not None
-    
-    src_filter = (src_stop.station_code == source_upper) if source_is_code else (src_stop.station_name.ilike(f"%{source}%"))
-    dest_filter = (dest_stop.station_code == dest_upper) if dest_is_code else (dest_stop.station_name.ilike(f"%{destination}%"))
-    
-    # Query trains going through both stops where source comes before destination
     query = db.query(
         Train, 
         src_stop.departure.label("src_departure"),
@@ -257,12 +410,11 @@ def search_trains(
         join(src_stop, Train.id == src_stop.train_id).\
         join(dest_stop, Train.id == dest_stop.train_id).\
         filter(
-            src_filter,
-            dest_filter,
+            src_stop.station_code == src_code,
+            dest_stop.station_code == dest_code,
             src_stop.sequence < dest_stop.sequence
         )
         
-    # Filter by type if provided
     if type:
         query = query.filter(Train.type.ilike(f"%{type}%"))
         
@@ -271,14 +423,11 @@ def search_trains(
     # Format results
     trains_list = []
     for row in results:
-        train, src_dep, dest_arr, src_name, dest_name, src_code, dest_code, src_day, dest_day = row
-        
-        # Calculate dynamic duration and sort value
+        train, src_dep, dest_arr, s_name, d_name, s_code, d_code, src_day, dest_day = row
         duration_str, duration_mins = calculate_dynamic_duration(
             src_dep, dest_arr, src_day, dest_day
         )
         
-        # Parse departure time to time object or fallback for sorting
         try:
             dep_time = datetime.strptime(src_dep if src_dep not in ["Source", ""] else "00:00", "%H:%M").time()
         except:
@@ -288,8 +437,8 @@ def search_trains(
             "id": train.id,
             "train_number": train.train_number,
             "name": train.name,
-            "source": f"{src_name.title()} ({src_code.upper()})",
-            "destination": f"{dest_name.title()} ({dest_code.upper()})",
+            "source": f"{s_name.title()} ({s_code.upper()})",
+            "destination": f"{d_name.title()} ({d_code.upper()})",
             "departure": src_dep if src_dep not in ["Source", ""] else "00:00",
             "arrival": dest_arr if dest_arr not in ["Destination", ""] else "00:00",
             "duration": duration_str,
@@ -299,7 +448,6 @@ def search_trains(
             "dep_time_obj": dep_time
         })
         
-    # Filter by running day if date provided
     if date:
         target_day = get_day_of_week(date)
         if target_day:
@@ -308,15 +456,19 @@ def search_trains(
                 if t["running_days"] and isinstance(t["running_days"], dict) and t["running_days"].get(target_day, False)
             ]
             
-    # Sort results
     if sort == "departure":
         trains_list.sort(key=lambda x: x["dep_time_obj"])
     elif sort == "duration":
         trains_list.sort(key=lambda x: x["duration_mins"])
-        
-    # Clean up temporary fields before responding
     for t in trains_list:
         t.pop("dep_time_obj", None)
         t.pop("duration_mins", None)
+        
+    if len(trains_list) == 0:
+        return {
+            "trains": [],
+            "count": 0,
+            "message": f"Train not found. There is no direct train between {src_name} ({src_code}) and {dest_name} ({dest_code})."
+        }
         
     return {"trains": trains_list[:30], "count": len(trains_list[:30])}

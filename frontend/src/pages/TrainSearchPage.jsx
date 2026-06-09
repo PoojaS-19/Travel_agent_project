@@ -112,7 +112,7 @@ export default function TrainSearchPage() {
       if (data.trains && data.trains.length > 0) {
         setTrains(data.trains);
       } else {
-        setError("No trains found for this route.");
+        setError(data.message || "Train not found");
       }
       setSearchParams({
         source: from,
