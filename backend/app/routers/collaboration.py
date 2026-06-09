@@ -558,13 +558,58 @@ async def websocket_trip_endpoint(websocket: WebSocket, trip_id: int, token: str
             try:
                 import json
                 data = json.loads(text_data)
-                if data.get("event") == "chat_typing":
+                event_type = data.get("event")
+                
+                if event_type == "chat_typing":
                     is_typing = data.get("payload", {}).get("is_typing", True)
                     await trip_ws_manager.broadcast(trip_id, "chat_typing", {
                         "trip_id": trip_id,
                         "user_id": user_id,
                         "username": username,
                         "is_typing": is_typing
+                    })
+                elif event_type == "shareLocation":
+                    payload = data.get("payload", {})
+                    lat, lng = payload.get("latitude"), payload.get("longitude")
+                    if lat is not None and lng is not None:
+                        from app.models.location import LiveLocation, LocationHistory
+                        loc = db.query(LiveLocation).filter_by(user_id=user_id, trip_id=trip_id).first()
+                        if not loc:
+                            loc = LiveLocation(user_id=user_id, trip_id=trip_id, latitude=lat, longitude=lng)
+                            db.add(loc)
+                        else:
+                            loc.latitude = lat
+                            loc.longitude = lng
+                        
+                        hist = LocationHistory(user_id=user_id, trip_id=trip_id, latitude=lat, longitude=lng)
+                        db.add(hist)
+                        db.commit()
+                        
+                        await trip_ws_manager.broadcast(trip_id, "locationUpdated", {
+                            "tripId": trip_id,
+                            "userId": user_id,
+                            "name": username,
+                            "latitude": lat,
+                            "longitude": lng
+                        })
+                elif event_type == "sosAlert":
+                    payload = data.get("payload", {})
+                    lat, lng = payload.get("latitude"), payload.get("longitude")
+                    from app.models.location import SOSAlert
+                    sos = SOSAlert(user_id=user_id, trip_id=trip_id, latitude=lat, longitude=lng)
+                    db.add(sos)
+                    db.commit()
+                    
+                    await trip_ws_manager.broadcast(trip_id, "sosReceived", {
+                        "userId": user_id,
+                        "name": username,
+                        "latitude": lat,
+                        "longitude": lng
+                    })
+                elif event_type == "memberArrived":
+                    await trip_ws_manager.broadcast(trip_id, "memberArrived", {
+                        "userId": user_id,
+                        "name": username
                     })
             except Exception:
                 pass

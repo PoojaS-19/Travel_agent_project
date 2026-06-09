@@ -77,7 +77,7 @@ const TESTIMONIALS = [
   }
 ];
 
-function AutocompleteCell({ label, placeholder, value, onChange, icon: Icon }) {
+function AutocompleteCell({ placeholder, value, onChange, icon: Icon }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [query, setQuery] = useState(value);
   const wrapperRef = useRef(null);
@@ -102,11 +102,8 @@ function AutocompleteCell({ label, placeholder, value, onChange, icon: Icon }) {
   );
 
   return (
-    <div className="mmt-input-segment relative hover:bg-white/5 transition-colors" ref={wrapperRef}>
-      <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-        {Icon && <Icon className="w-3.5 h-3.5 text-white/60" />}
-        {label}
-      </label>
+    <div className="relative w-full flex items-center gap-3" ref={wrapperRef}>
+      {Icon && <Icon className="w-5 h-5 text-cyan-400 shrink-0" />}
       <input
         type="text"
         placeholder={placeholder}
@@ -117,10 +114,10 @@ function AutocompleteCell({ label, placeholder, value, onChange, icon: Icon }) {
           setShowSuggestions(true);
         }}
         onFocus={() => setShowSuggestions(true)}
-        className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40"
+        className="w-full bg-transparent border-none p-0 text-lg font-bold text-white focus:ring-0 outline-none placeholder-white/50"
       />
       {showSuggestions && query.length > 0 && (
-        <div className="absolute left-0 w-full mt-2 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto text-left">
+        <div className="absolute top-full left-0 w-[250px] mt-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto text-left">
           {filtered.length > 0 ? (
             filtered.map((city) => (
               <div
@@ -355,29 +352,24 @@ export default function MainHome() {
         <FloatingElements />
 
         {/* Hero Content Area */}
-        <div className="relative z-10 w-full max-w-5xl flex flex-col items-center text-center space-y-6">
+        <div className="relative z-10 w-full max-w-5xl flex flex-col items-center text-center space-y-6 mt-12">
           <motion.h1
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1 }}
-            className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight"
+            className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight drop-shadow-2xl"
           >
             Explore The World With <span className="bg-gradient-to-r from-cyan-400 to-brand-secondary bg-clip-text text-transparent">AI</span>
           </motion.h1>
 
-          <h2 className="text-xl md:text-2xl font-bold text-slate-200">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-200 drop-shadow-md">
             <TypewriterHeadline />
           </h2>
 
-          {/* Floating Search Panel */}
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8 }}
-            className="w-full mt-8"
-          >
-            {/* Navigation Tabs (Glassmorphism) */}
-            <div className="flex justify-center flex-wrap gap-2 mb-3 bg-white/10 backdrop-blur-xl p-2.5 rounded-t-2xl border-x border-t border-white/20 shadow-lg">
+          {/* New Neo-Glassmorphism UI */}
+          <div className="w-full max-w-4xl mx-auto mt-10">
+            {/* Minimalist Floating Tabs */}
+            <div className="flex justify-center gap-4 md:gap-8 mb-6">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -385,229 +377,119 @@ export default function MainHome() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-white/25 text-white shadow-inner border border-white/30"
-                        : "text-white/70 hover:text-white bg-transparent border border-transparent"
+                    className={`flex flex-col items-center gap-2 group cursor-pointer transition-all ${
+                      isActive ? "text-cyan-400" : "text-white/70 hover:text-white"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? "text-white animate-pulse" : "text-white/60"}`} />
-                    {tab.label}
+                    <div className={`p-3 md:p-4 rounded-full transition-all duration-300 ${isActive ? "bg-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.5)] border border-cyan-400/50" : "bg-white/5 border border-white/10 group-hover:bg-white/10 backdrop-blur-md"}`}>
+                      <Icon className="w-5 h-5 md:w-6 md:h-6" />
+                    </div>
+                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Input Cards Container (Glassmorphism) */}
-            <div className="mmt-search-card shadow-2xl relative bg-white/10 backdrop-blur-xl p-6 rounded-b-2xl border-x border-b border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] text-left z-20">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.2 }}
+            {/* AI Command Pill */}
+            <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="w-full bg-slate-900/40 backdrop-blur-2xl border border-white/20 rounded-[2rem] p-2 shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative z-20 flex flex-col md:flex-row items-center gap-2"
+            >
+                {/* Active Tab Inputs Content */}
+                <div className="flex-1 flex flex-col md:flex-row w-full divide-y md:divide-y-0 md:divide-x divide-white/10">
+                    {activeTab === "itinerary" && (
+                        <>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none">
+                              <AutocompleteCell placeholder="From where?" value={startCity} onChange={setStartCity} icon={MapPin} />
+                            </div>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors">
+                              <AutocompleteCell placeholder="To where?" value={destination} onChange={setDestination} icon={MapPin} />
+                            </div>
+                            <div className="w-full md:w-40 px-6 py-4 hover:bg-white/5 transition-colors rounded-b-3xl md:rounded-none flex items-center gap-3">
+                              <Calendar className="w-5 h-5 text-cyan-400 shrink-0" />
+                              <input type="number" placeholder="Days" value={days} onChange={e=>setDays(e.target.value)} className="w-full bg-transparent border-none p-0 text-lg font-bold text-white outline-none placeholder-white/50" />
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === "flights" && (
+                        <>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none">
+                              <AutocompleteCell placeholder="Source City" value={flightFrom} onChange={setFlightFrom} icon={MapPin} />
+                            </div>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors">
+                              <AutocompleteCell placeholder="Destination City" value={flightTo} onChange={setFlightTo} icon={MapPin} />
+                            </div>
+                            <div className="w-full md:w-56 px-6 py-4 hover:bg-white/5 transition-colors rounded-b-3xl md:rounded-none flex items-center gap-3">
+                              <Calendar className="w-5 h-5 text-cyan-400 shrink-0" />
+                              <input type="date" value={flightDate} onChange={e=>setFlightDate(e.target.value)} className="w-full bg-transparent border-none p-0 text-base font-bold text-white outline-none cursor-pointer [color-scheme:dark]" />
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === "hotels" && (
+                        <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors rounded-3xl md:rounded-l-3xl md:rounded-r-none">
+                          <AutocompleteCell placeholder="Where are you staying?" value={hotelCity} onChange={setHotelCity} icon={Bed} />
+                        </div>
+                    )}
+
+                    {activeTab === "restaurants" && (
+                        <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors rounded-3xl md:rounded-l-3xl md:rounded-r-none">
+                          <AutocompleteCell placeholder="Find best foods in..." value={restaurantCity} onChange={setRestaurantCity} icon={Utensils} />
+                        </div>
+                    )}
+
+                    {(activeTab === "trains" || activeTab === "buses") && (
+                        <>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none">
+                              <AutocompleteCell placeholder="From Station" value={activeTab === "trains" ? trainFrom : busFrom} onChange={activeTab === "trains" ? setTrainFrom : setBusFrom} icon={MapPin} />
+                            </div>
+                            <div className="flex-1 px-6 py-4 hover:bg-white/5 transition-colors">
+                              <AutocompleteCell placeholder="To Station" value={activeTab === "trains" ? trainTo : busTo} onChange={activeTab === "trains" ? setTrainTo : setBusTo} icon={MapPin} />
+                            </div>
+                            <div className="w-full md:w-56 px-6 py-4 hover:bg-white/5 transition-colors rounded-b-3xl md:rounded-none flex items-center gap-3">
+                              <Calendar className="w-5 h-5 text-cyan-400 shrink-0" />
+                              <input type="date" value={activeTab === "trains" ? trainDate : busDate} onChange={activeTab === "trains" ? e=>setTrainDate(e.target.value) : e=>setBusDate(e.target.value)} className="w-full bg-transparent border-none p-0 text-base font-bold text-white outline-none cursor-pointer [color-scheme:dark]" />
+                            </div>
+                        </>
+                    )}
+                </div>
+                
+                {/* Unified Search Button */}
+                <button 
+                  onClick={handleSearch} 
+                  className="w-full md:w-auto h-14 md:h-[72px] px-8 bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 rounded-full md:rounded-[1.5rem] text-white font-black text-lg shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer flex items-center justify-center gap-3 shrink-0"
                 >
-                  {activeTab === "itinerary" && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 border border-white/20 rounded-xl overflow-hidden divide-y md:divide-y-0 md:divide-x divide-white/20 bg-white/5 backdrop-blur-md shadow-inner">
-                        <AutocompleteCell
-                          label="Starting City"
-                          placeholder="e.g. BOM"
-                          value={startCity}
-                          onChange={setStartCity}
-                          icon={MapPin}
-                        />
-                        <AutocompleteCell
-                          label="Destination"
-                          placeholder="e.g. DXB"
-                          value={destination}
-                          onChange={setDestination}
-                          icon={MapPin}
-                        />
-                        <div className="mmt-input-segment hover:bg-white/5 transition-colors">
-                          <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                            <Calendar className="w-3.5 h-3.5 text-white/60" />
-                            Duration
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="Days"
-                            value={days}
-                            onChange={(e) => setDays(e.target.value)}
-                            className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40"
-                          />
-                        </div>
-                        <div className="mmt-input-segment hover:bg-white/5 transition-colors">
-                          <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                            <Sparkles className="w-3.5 h-3.5 text-white/60" />
-                            Theme
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Adventure, Relax"
-                            value={theme}
-                            onChange={(e) => setTheme(e.target.value)}
-                            className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40"
-                          />
-                        </div>
-                      </div>
-                      <textarea
-                        placeholder="Additional preferences (e.g. vegetarian, low walking, museums, budget)"
-                        value={preferences}
-                        onChange={(e) => setPreferences(e.target.value)}
-                        rows={2}
-                        className="w-full border border-white/20 bg-white/5 backdrop-blur-md rounded-xl px-4 py-3 mt-4 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-white placeholder-white/40 text-sm"
-                      />
-                    </div>
-                  )}
-
-                  {activeTab === "flights" && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 border border-white/20 rounded-xl overflow-hidden divide-y md:divide-y-0 md:divide-x divide-white/20 bg-white/5 backdrop-blur-md shadow-inner">
-                      <AutocompleteCell
-                        label="From"
-                        placeholder="e.g. BOM"
-                        value={flightFrom}
-                        onChange={setFlightFrom}
-                        icon={MapPin}
-                      />
-                      <AutocompleteCell
-                        label="To"
-                        placeholder="e.g. DEL"
-                        value={flightTo}
-                        onChange={setFlightTo}
-                        icon={MapPin}
-                      />
-                      <div className="mmt-input-segment col-span-1 md:col-span-2 hover:bg-white/5 transition-colors">
-                        <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                          <Calendar className="w-3.5 h-3.5 text-white/60" />
-                          Departure Date
-                        </label>
-                        <input
-                          type="date"
-                          value={flightDate}
-                          onChange={(e) => setFlightDate(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40 cursor-pointer [color-scheme:dark]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {activeTab === "hotels" && (
-                    <div className="grid grid-cols-1 border border-white/20 rounded-xl overflow-hidden bg-white/5 backdrop-blur-md shadow-inner">
-                      <AutocompleteCell
-                        label="Enter City"
-                        placeholder="Where to stay? (e.g. Mumbai)"
-                        value={hotelCity}
-                        onChange={setHotelCity}
-                        icon={MapPin}
-                      />
-                    </div>
-                  )}
-
-                  {activeTab === "restaurants" && (
-                    <div className="grid grid-cols-1 border border-white/20 rounded-xl overflow-hidden bg-white/5 backdrop-blur-md shadow-inner">
-                      <AutocompleteCell
-                        label="Enter City"
-                        placeholder="Find culinary options (e.g. Mumbai)"
-                        value={restaurantCity}
-                        onChange={setRestaurantCity}
-                        icon={MapPin}
-                      />
-                    </div>
-                  )}
-
-                  {activeTab === "trains" && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 border border-white/20 rounded-xl overflow-hidden divide-y md:divide-y-0 md:divide-x divide-white/20 bg-white/5 backdrop-blur-md shadow-inner">
-                      <AutocompleteCell
-                        label="From Station"
-                        placeholder="e.g. BOM"
-                        value={trainFrom}
-                        onChange={setTrainFrom}
-                        icon={MapPin}
-                      />
-                      <AutocompleteCell
-                        label="To Station"
-                        placeholder="e.g. DEL"
-                        value={trainTo}
-                        onChange={setTrainTo}
-                        icon={MapPin}
-                      />
-                      <div className="mmt-input-segment hover:bg-white/5 transition-colors">
-                        <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                          <Calendar className="w-3.5 h-3.5 text-white/60" />
-                          Travel Date
-                        </label>
-                        <input
-                          type="date"
-                          value={trainDate}
-                          onChange={(e) => setTrainDate(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40 cursor-pointer [color-scheme:dark]"
-                        />
-                      </div>
-                      <div className="mmt-input-segment hover:bg-white/5 transition-colors">
-                        <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                          <Train className="w-3.5 h-3.5 text-white/60" />
-                          Train Class
-                        </label>
-                        <select
-                          value={trainType}
-                          onChange={(e) => setTrainType(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none cursor-pointer [color-scheme:dark]"
-                        >
-                          <option value="" className="bg-slate-900 text-white">All Classes</option>
-                          <option value="Express" className="bg-slate-900 text-white">Express</option>
-                          <option value="Passenger" className="bg-slate-900 text-white">Passenger</option>
-                          <option value="Superfast" className="bg-slate-900 text-white">Superfast</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {activeTab === "buses" && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 border border-white/20 rounded-xl overflow-hidden divide-y md:divide-y-0 md:divide-x divide-white/20 bg-white/5 backdrop-blur-md shadow-inner">
-                      <AutocompleteCell
-                        label="From City"
-                        placeholder="Source city"
-                        value={busFrom}
-                        onChange={setBusFrom}
-                        icon={MapPin}
-                      />
-                      <AutocompleteCell
-                        label="To City"
-                        placeholder="Destination city"
-                        value={busTo}
-                        onChange={setBusTo}
-                        icon={MapPin}
-                      />
-                      <div className="mmt-input-segment col-span-1 md:col-span-2 hover:bg-white/5 transition-colors">
-                        <label className="flex items-center gap-1 text-[10px] font-black text-white/70 uppercase tracking-wider mb-1">
-                          <Calendar className="w-3.5 h-3.5 text-white/60" />
-                          Travel Date
-                        </label>
-                        <input
-                          type="date"
-                          value={busDate}
-                          onChange={(e) => setBusDate(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-base font-extrabold text-white focus:ring-0 outline-none placeholder-white/40 cursor-pointer [color-scheme:dark]"
-                        />
-                      </div>
-                    </div>
-                  )}
+                    <Search className="w-6 h-6 text-white" />
+                    <span>Search</span>
+                </button>
+            </motion.div>
+            
+            {activeTab === "itinerary" && (
+                <motion.div initial={{opacity:0}} animate={{opacity:1}} className="mt-4 flex justify-center w-full">
+                  <div className="bg-slate-900/40 backdrop-blur-lg border border-white/10 rounded-xl px-4 py-3 flex gap-4 w-full max-w-4xl shadow-xl">
+                    <input 
+                      type="text" 
+                      placeholder="Theme (e.g. Adventure, Relax)" 
+                      value={theme} 
+                      onChange={e=>setTheme(e.target.value)} 
+                      className="flex-1 bg-transparent border-none outline-none text-white text-sm font-semibold placeholder-white/50"
+                    />
+                    <div className="w-[1px] bg-white/20"></div>
+                    <input 
+                      type="text" 
+                      placeholder="Special preferences (e.g. Vegan, Low walking)" 
+                      value={preferences} 
+                      onChange={e=>setPreferences(e.target.value)} 
+                      className="flex-1 bg-transparent border-none outline-none text-white text-sm font-semibold placeholder-white/50"
+                    />
+                  </div>
                 </motion.div>
-              </AnimatePresence>
-
-              {/* Hanging Modern Cyan-Blue Gradient Search CTA Button */}
-              <motion.button
-                onClick={handleSearch}
-                whileHover={{ scale: 1.05 }}
-                className="absolute -bottom-6 left-1/2 -translate-x-1/2 px-12 py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-extrabold text-base rounded-full shadow-xl shadow-blue-500/20 transition-all uppercase tracking-wider z-10 shrink-0 border-none cursor-pointer flex items-center gap-2 justify-center"
-              >
-                <Search className="w-4 h-4 text-white" />
-                Search
-              </motion.button>
-            </div>
-          </motion.div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -423,6 +423,7 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
     days: searchParams.get("days") || "",
     theme: searchParams.get("theme") || "",
     preferences: searchParams.get("preferences") || "",
+    route_strategy: searchParams.get("route_strategy") || "Fastest Route",
   });
 
   useEffect(() => {
@@ -474,11 +475,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
       if (data.error) {
         setResult(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
       } else if (data.daily_plans) {
-        setResult(data.itinerary_text);
+        setResult(data);
         setDailyPlans(data.daily_plans);
       } else {
         const fallback = data.itinerary || data;
-        setResult(typeof fallback === "string" ? fallback : JSON.stringify(fallback));
+        setResult(fallback);
       }
 
       if (data.id) {
@@ -680,7 +681,7 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
   };
 
   const loadSavedItinerary = (itinerary) => {
-    setResult(itinerary.itinerary_text);
+    setResult({ ...itinerary, route_data: itinerary.route_polyline });
     setDailyPlans(itinerary.daily_plans);
     setShowSaved(false);
     if (itinerary.id) {
@@ -922,7 +923,7 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative flex items-center">
             <Calendar className="absolute left-3 w-5 h-5 text-brand-secondary" />
             <input
@@ -953,6 +954,21 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
               <option value="Spiritual & Religious">Spiritual & Religious</option>
               <option value="Budget Travel">Budget Travel</option>
               <option value="Luxury & Leisure">Luxury & Leisure</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="relative w-full">
+            <select
+              value={form.route_strategy}
+              onChange={(e) => setForm({ ...form, route_strategy: e.target.value })}
+              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none text-sm transition-all cursor-pointer appearance-none"
+            >
+              <option value="Fastest Route">⚡ Fastest Route</option>
+              <option value="Scenic Route">🏞️ Scenic Route</option>
+              <option value="Toll-Free Route">🛣️ Toll-Free Route</option>
+              <option value="Fuel Efficient Route">🍃 Fuel Efficient</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
               <ChevronDown className="w-4 h-4" />
@@ -1223,7 +1239,25 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
           <div className="p-6 md:p-8 space-y-8">
             {/* MASTER MAP OVERVIEW */}
             <div className="master-map-container rounded-xl overflow-hidden border border-slate-200">
-              <MapComponent allDailyPlans={dailyPlans} />
+              {(() => {
+                const routeData = result?.route_data || (chatItinerary && chatItinerary.route_data);
+                return (
+                  <>
+                    {routeData && (
+                      <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap gap-2 justify-between items-center">
+                        <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                          🚗 Live Driving Route {routeData.summary ? <span className="text-slate-500 font-semibold text-xs ml-2">via {routeData.summary}</span> : ""}
+                        </span>
+                        <div className="flex gap-3 text-xs font-semibold text-slate-600">
+                          <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1">🛣️ {routeData.distance}</span>
+                          <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1">⏱️ {routeData.duration}</span>
+                        </div>
+                      </div>
+                    )}
+                    <MapComponent allDailyPlans={dailyPlans} routePolyline={routeData?.polyline} />
+                  </>
+                );
+              })()}
             </div>
 
             <div className="space-y-12">

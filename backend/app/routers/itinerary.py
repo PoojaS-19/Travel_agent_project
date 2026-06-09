@@ -11,10 +11,92 @@ from app.services.groq_service import get_groq_response, get_groq_stream
 from app.database import get_db
 from app.models.schemas import ItineraryUpdate
 from app.models import Itinerary, TripCollaborator
-from app.services.database_service import ItineraryService
+from app.services.database_service import ItineraryService, normalize_daily_plans
 from app.services.recommendation_service import RecommendationService
 from app.routers.auth import get_current_user_id
-from app.services.google_maps import calculate_distance
+from app.services.google_maps import get_places, get_directions, calculate_distance
+from concurrent.futures import ThreadPoolExecutor
+
+def point_to_polyline_distance(lat, lon, polyline_points):
+    min_dist = float('inf')
+    for plat, plon in polyline_points:
+        d = calculate_distance(lat, lon, plat, plon)
+        if d < min_dist:
+            min_dist = d
+    return min_dist
+
+def inject_real_coordinates(daily_plans, destination, route_polyline=None, route_data=None, start_city=None):
+    if not isinstance(daily_plans, list):
+        return daily_plans
+
+    def fetch_coords(act):
+        if not isinstance(act, dict): return
+        place_name = act.get("place_name")
+        if not place_name: return
+        
+        query = f"{place_name} {destination}"
+        try:
+            results = get_places(query, limit=1)
+            if results and len(results) > 0:
+                loc = results[0].get("geometry", {}).get("location", {})
+                if "lat" in loc and "lng" in loc:
+                    act["lat"] = float(loc["lat"])
+                    act["lon"] = float(loc["lng"])
+        except Exception:
+            pass 
+
+    activities = []
+    for day in daily_plans:
+        if isinstance(day, dict) and isinstance(day.get("activities"), list):
+            activities.extend(day["activities"])
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(fetch_coords, activities)
+
+    if route_polyline and route_data:
+        for day in daily_plans:
+            if isinstance(day, dict) and isinstance(day.get("activities"), list):
+                valid_activities = []
+                for act in day["activities"]:
+                    lat, lon = act.get("lat"), act.get("lon")
+                    if lat and lon:
+                        dist = point_to_polyline_distance(lat, lon, route_polyline)
+                        if dist <= 25: 
+                            valid_activities.append(act)
+                        else:
+                            print(f"Filtered out {act.get('place_name')} (dist: {dist}km)")
+                day["activities"] = valid_activities
+
+        if len(daily_plans) > 0 and isinstance(daily_plans[0], dict) and "activities" in daily_plans[0]:
+            start_loc = route_data.get("start_location", {})
+            if "lat" in start_loc:
+                daily_plans[0]["activities"].insert(0, {
+                    "time": "Departure",
+                    "place_name": f"Start from {start_city}",
+                    "category": "Travel",
+                    "description": "Beginning of your road trip.",
+                    "lat": float(start_loc["lat"]),
+                    "lon": float(start_loc["lng"]),
+                    "cost": "",
+                    "alternatives": []
+                })
+
+        if len(daily_plans) > 0 and isinstance(daily_plans[-1], dict) and "activities" in daily_plans[-1]:
+            end_loc = route_data.get("end_location", {})
+            if "lat" in end_loc:
+                daily_plans[-1]["activities"].append({
+                    "time": "Arrival",
+                    "place_name": f"Arrive at {destination}",
+                    "category": "Travel",
+                    "description": f"Destination reached ({route_data.get('distance')}, {route_data.get('duration')}).",
+                    "lat": float(end_loc["lat"]),
+                    "lon": float(end_loc["lng"]),
+                    "cost": "",
+                    "alternatives": []
+                })
+
+    return daily_plans
+
 from pydantic import BaseModel
 
 router = APIRouter(tags=["Itinerary & AI Chatbot"])
@@ -60,6 +142,7 @@ def serialize_itinerary(itinerary: Itinerary) -> dict:
         "destination": itinerary.destination,
         "itinerary_text": itinerary.itinerary_text,
         "daily_plans": normalized_plans,
+        "route_data": itinerary.route_polyline, # stored in this column
         "language": itinerary.language,
         "created_at": itinerary.created_at.isoformat(),
     }
@@ -147,6 +230,7 @@ async def generate_itinerary(
         preferences = details.get("preferences", "")
         start_date = details.get("start_date")
         language = details.get("language", "English")
+        route_strategy = details.get("route_strategy", "Fastest Route")
 
         if not preferences and user_id:
             preferences = get_user_interest_hint(db, user_id)
@@ -163,6 +247,31 @@ async def generate_itinerary(
             except Exception:
                 start_date_obj = None
 
+        route_data = None
+        route_polyline = None
+        route_context = ""
+        if start_city and destination and start_city.lower() != destination.lower() and start_city.lower() != "your current location":
+            try:
+                route_data = get_directions(start_city, destination, strategy=route_strategy)
+                if route_data:
+                    route_polyline = route_data["polyline"]
+                    print("\n--- ITINERARY ROUTING DEBUG ---")
+                    print(f"Strategy: {route_strategy}")
+                    print(f"Start Coordinates: {route_data.get('start_location')}")
+                    print(f"Destination Coordinates: {route_data.get('end_location')}")
+                    print(f"Total Distance: {route_data.get('distance')}")
+                    print(f"Travel Time: {route_data.get('duration')}")
+                    print(f"Route Summary: {route_data.get('summary')}")
+                    print("Routing API Response: OK (Polyline mapped)")
+                    print("-------------------------------\n")
+                    route_context = f"The actual driving route from {start_city} to {destination} ({route_strategy}) covers {route_data['distance']} and takes {route_data['duration']} via {route_data.get('summary')}. IMPORTANT: All suggested places (attractions, restaurants, rest stops) MUST be along this exact road route (within 5-10km), reachable without major detours, and sequentially ordered along the route from start to destination."
+                else:
+                    print("\n--- ITINERARY ROUTING DEBUG ---")
+                    print("Routing API Response: FAILED (No route found)")
+                    print("-------------------------------\n")
+            except Exception as e:
+                print(f"Error fetching directions: {e}")
+
         prompt_header = f"""
 Generate a detailed, time-based travel itinerary for the user below.
 
@@ -173,7 +282,9 @@ Starting City: {start_city}
 Destination: {destination}
 Preferences: {preferences or 'No special preferences provided'}
 
-If Starting City is different from Destination, include travel from Starting City to Destination on DAY 1 with realistic travel time and cost.
+{route_context}
+
+If Starting City is different from Destination, include travel from Starting City to Destination on DAY 1 with realistic travel time and cost. DO NOT invent navigation paths or fake route coordinates. Only suggest points of interest, food, and rest stops along the way.
 
 CRITICAL REQUIREMENT: You MUST include meal times (Breakfast, Lunch, Dinner) under the "Food" category and hotel check-ins under the "Relax" category.
 For meals and hotel accommodations, DO NOT suggest a single direct place. Instead, provide 3 to 4 distinct options in the 'description' field based on different budgets, tastes, or facilities (e.g., "Option 1 (Budget): X... Option 2 (Luxury): Y..."). Set the 'place_name' to "Dining Options" or "Accommodation Options" respectively.
@@ -262,6 +373,7 @@ Now generate the JSON for the user's inputs.
             data = repair_json(clean_content, return_objects=True)
             if isinstance(data, dict) and "daily_plans" in data:
                 data["daily_plans"] = normalize_daily_plans(data["daily_plans"])
+                data["daily_plans"] = inject_real_coordinates(data["daily_plans"], destination, route_polyline, route_data, start_city)
 
             itinerary_id = None
             if user_id and isinstance(data, dict) and data.get("itinerary_text") and data.get("daily_plans"):
@@ -273,6 +385,7 @@ Now generate the JSON for the user's inputs.
                         destination=destination,
                         itinerary_text=data.get("itinerary_text", ""),
                         daily_plans=data.get("daily_plans", []),
+                        route_polyline=route_data,
                         language=language,
                     )
                     itinerary_id = itinerary_db.id
@@ -285,6 +398,7 @@ Now generate the JSON for the user's inputs.
 
             if itinerary_id:
                 data["id"] = itinerary_id
+            data["route_data"] = route_data
             return data
         except Exception as e:
             print("Failed to parse JSON:", e)
@@ -533,6 +647,7 @@ Now respond to the user's latest message as JSON:
                 plan_payload = parsed.get("plan_data") if isinstance(parsed.get("plan_data"), dict) else parsed
                 if plan_payload and plan_payload.get("destination") and plan_payload.get("daily_plans"):
                     plan_payload["daily_plans"] = normalize_daily_plans(plan_payload["daily_plans"])
+                    plan_payload["daily_plans"] = inject_real_coordinates(plan_payload["daily_plans"], plan_payload.get("destination", ""))
                     try:
                         ItineraryService.create_itinerary(
                             db=db,
@@ -671,6 +786,7 @@ If the question is not travel-related, politely refuse.
                     json_text = full_text.split("---JSON_START---", 1)[1].split("---JSON_END---", 1)[0].strip()
                     plan_data = repair_json(json_text, return_objects=True)
                     if isinstance(plan_data, dict) and plan_data.get("destination") and plan_data.get("daily_plans"):
+                        plan_data["daily_plans"] = inject_real_coordinates(plan_data["daily_plans"], plan_data.get("destination", ""))
                         ItineraryService.create_itinerary(
                             db=db,
                             user_id=user_id,
@@ -771,6 +887,7 @@ The JSON structure must be exactly:
         parsed["itinerary_text"] = itinerary_text + "\n" + parsed.get("itinerary_text", "")
         if "daily_plans" in parsed:
             parsed["daily_plans"] = normalize_daily_plans(parsed["daily_plans"])
+            parsed["daily_plans"] = inject_real_coordinates(parsed["daily_plans"], req.destination)
         return parsed
     except Exception:
         return {

@@ -131,6 +131,7 @@ class Itinerary(Base):
     destination = Column(String(100), nullable=True)
     itinerary_text = Column(Text, nullable=True)
     daily_plans = Column(JSON, nullable=True)
+    route_polyline = Column(JSON, nullable=True)
     language = Column(String(20), default="English")
     created_at = Column(DateTime, default=datetime.utcnow)
 

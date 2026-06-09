@@ -116,6 +116,9 @@ class EmailService:
 
     @classmethod
     def send_verification_otp(cls, to_email: str, otp_code: str) -> EmailDeliveryResult:
+        print(f"\n==========================================")
+        print(f"[DEV FALLBACK] OTP CODE FOR {to_email} IS: {otp_code}")
+        print(f"==========================================\n")
         subject = "Verify your email for TripAI Travel"
         text_body = f"Your 6-digit verification code is: {otp_code}"
         html_body = f"""

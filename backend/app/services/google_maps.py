@@ -1,5 +1,6 @@
 import os
 import requests
+import polyline
 from math import radians, sin, cos, sqrt, atan2
 from dotenv import load_dotenv
 
@@ -51,3 +52,37 @@ def get_place_photos(place_name: str, limit: int = 3):
             if len(photos) >= limit:
                 break
     return photos
+
+def get_directions(origin: str, destination: str, strategy: str = "Fastest Route"):
+    """Fetch driving directions and return decoded polyline, distance, and duration."""
+    url = f"https://maps.googleapis.com/maps/api/directions/json?origin={origin}&destination={destination}&key={GOOGLE_API_KEY}&alternatives=true"
+    
+    if strategy == "Toll-Free Route":
+        url += "&avoid=tolls"
+    elif strategy == "Scenic Route":
+        url += "&avoid=highways"
+        
+    r = requests.get(url).json()
+    if r.get("status") == "OK" and r.get("routes"):
+        routes = r["routes"]
+        
+        # Select best route based on strategy
+        best_route = routes[0]
+        if strategy == "Fuel Efficient Route" and len(routes) > 1:
+            # Pick shortest distance route
+            best_route = min(routes, key=lambda rt: rt["legs"][0]["distance"]["value"])
+            
+        points = polyline.decode(best_route["overview_polyline"]["points"])
+        legs = best_route["legs"][0]
+        distance = legs["distance"]["text"]
+        duration = legs["duration"]["text"]
+        
+        return {
+            "polyline": points,
+            "distance": distance,
+            "duration": duration,
+            "start_location": legs["start_location"],
+            "end_location": legs["end_location"],
+            "summary": best_route.get("summary", "Standard Route")
+        }
+    return None

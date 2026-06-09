@@ -15,6 +15,7 @@ from app.routers.collaboration import router as collaboration_router, websocket_
 from app.routers.itinerary import router as itinerary_router
 from app.routers.buses import router as buses_router
 from app.routers.journal import router as journal_router
+from app.routers.location import router as location_router
 
 app = FastAPI(
     title="Travel Trip",
@@ -57,6 +58,14 @@ async def startup_event():
             # Column might already exist
             pass
 
+        # Check and add route_polyline column to itineraries if missing
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE itineraries ADD COLUMN route_polyline JSON"))
+                print("Dynamic migration: Added 'route_polyline' column to 'itineraries'")
+        except Exception:
+            pass
+
         # Ensure 'FOLLOWER' is added to 'collaboratorrole' type if using PostgreSQL
         try:
             if engine.dialect.name == "postgresql":
@@ -94,6 +103,7 @@ app.include_router(collaboration_router)
 app.include_router(itinerary_router)
 app.include_router(buses_router)
 app.include_router(journal_router)
+app.include_router(location_router)
 
 # --- WebSocket Route Registration ---
 app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)

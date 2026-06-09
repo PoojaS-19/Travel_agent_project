@@ -132,7 +132,7 @@ class ItineraryService:
     
     @staticmethod
     def create_itinerary(db: Session, user_id: int, start_city: str, destination: str,
-                        itinerary_text: str, daily_plans: dict, language: str = "English"):
+                        itinerary_text: str, daily_plans: dict, language: str = "English", route_polyline: list = None):
         """Create a new itinerary"""
         normalized_plans = normalize_daily_plans(daily_plans)
         itinerary = Itinerary(
@@ -141,6 +141,7 @@ class ItineraryService:
             destination=destination,
             itinerary_text=itinerary_text,
             daily_plans=normalized_plans,
+            route_polyline=route_polyline,
             language=language
         )
         db.add(itinerary)
