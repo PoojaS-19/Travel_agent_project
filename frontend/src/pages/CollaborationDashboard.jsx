@@ -161,6 +161,8 @@ export default function CollaborationDashboard() {
     memberLocations,
     expensePromptPlace,
     setExpensePromptPlace,
+    reviewPromptPlace,
+    setReviewPromptPlace,
     itinerary,
     loading,
     error,
@@ -168,6 +170,14 @@ export default function CollaborationDashboard() {
     typingUsers,
     actions
   } = useTripCollaboration(tripId);
+
+  useEffect(() => {
+    console.log("RENDER: expensePromptPlace changed to:", expensePromptPlace);
+  }, [expensePromptPlace]);
+
+  useEffect(() => {
+    console.log("RENDER: reviewPromptPlace changed to:", reviewPromptPlace);
+  }, [reviewPromptPlace]);
 
   // Chat UI states & logic
   const [chatCollapsed, setChatCollapsed] = useState(true);
@@ -273,6 +283,10 @@ export default function CollaborationDashboard() {
   // Modal / Form States
   const [promptAmount, setPromptAmount] = useState("");
   const [promptDesc, setPromptDesc] = useState("");
+
+  const [reviewRating, setReviewRating] = useState(5.0);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewPhoto, setReviewPhoto] = useState("");
 
   const [manualPlace, setManualPlace] = useState("");
   const [manualAmount, setManualAmount] = useState("");
@@ -843,6 +857,28 @@ export default function CollaborationDashboard() {
     }
   };
 
+  const handlePromptReviewSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post("/api/reviews/", {
+        place_name: reviewPromptPlace,
+        destination: itinerary?.destination || "Unknown",
+        rating: parseFloat(reviewRating) || 5.0,
+        review: reviewText,
+        photo_url: reviewPhoto
+      });
+      setReviewRating(5.0);
+      setReviewText("");
+      setReviewPhoto("");
+      setReviewPromptPlace(null);
+      setSuccessToast("Review & Rating added successfully!");
+      setTimeout(() => setSuccessToast(""), 3000);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to submit review");
+    }
+  };
+
   const handleManualExpenseSubmit = async (e) => {
     e.preventDefault();
     if (!manualPlace || !manualAmount || isNaN(manualAmount)) return;
@@ -934,6 +970,56 @@ export default function CollaborationDashboard() {
               <div className="collab-modal-actions">
                 <button type="submit" className="saved-trip-primary-btn">Submit Expense</button>
                 <button type="button" onClick={() => setExpensePromptPlace(null)} className="saved-trip-secondary-btn" style={{ background: "#64748b" }}>Skip</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 1.5 Real-time Completion Review Prompt Modal */}
+      {reviewPromptPlace && (
+        <div className="collab-modal-backdrop" style={{ zIndex: 9998 }}>
+          <div className="collab-modal" style={{ border: "2px solid #a855f7" }}>
+            <div className="collab-modal-header">
+              <h2>⭐ Rate your Visit!</h2>
+              <button className="icon-button" onClick={() => setReviewPromptPlace(null)}>×</button>
+            </div>
+            <p>You completed <strong>{reviewPromptPlace}</strong>! Add a photo, review, and rating to help other travelers discovering this route.</p>
+            <form onSubmit={handlePromptReviewSubmit}>
+              <label>
+                Rating (1.0 - 5.0)
+                <input
+                  type="number"
+                  required
+                  step="0.1"
+                  min="1.0"
+                  max="5.0"
+                  value={reviewRating}
+                  onChange={(e) => setReviewRating(e.target.value)}
+                />
+              </label>
+              <label>
+                Review / Experience
+                <textarea
+                  placeholder="How was it? What do you recommend?"
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  rows={3}
+                  style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontFamily: "inherit" }}
+                />
+              </label>
+              <label>
+                Photo URL
+                <input
+                  type="url"
+                  placeholder="Paste an image URL here..."
+                  value={reviewPhoto}
+                  onChange={(e) => setReviewPhoto(e.target.value)}
+                />
+              </label>
+              <div className="collab-modal-actions" style={{ marginTop: "15px" }}>
+                <button type="submit" className="saved-trip-primary-btn" style={{ background: "#a855f7", borderColor: "#9333ea" }}>Post Review</button>
+                <button type="button" onClick={() => setReviewPromptPlace(null)} className="saved-trip-secondary-btn" style={{ background: "#64748b" }}>Skip</button>
               </div>
             </form>
           </div>

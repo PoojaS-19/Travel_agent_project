@@ -84,6 +84,14 @@ async def startup_event():
                     print("Dynamic migration: Altered 'itinerary_text' column to TYPE TEXT")
         except Exception as migration_error:
             print(f"Warning: Could not run dynamic migration for itinerary_text: {migration_error}")
+            
+        # Add photo_url to place_reviews
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE place_reviews ADD COLUMN photo_url VARCHAR(1000)"))
+                print("Dynamic migration: Added 'photo_url' column to 'place_reviews'")
+        except Exception:
+            pass
                 
     except Exception as e:
         print(f"Warning: Could not run startup database validation/migrations: {e}")
@@ -106,6 +114,6 @@ app.include_router(journal_router)
 app.include_router(location_router)
 
 # --- WebSocket Route Registration ---
-app.add_api_websocket_route("/ws/trips/{trip_id}", websocket_trip_endpoint)
+app.websocket("/ws/trips/{trip_id}")(websocket_trip_endpoint)
 
 # Reload trigger comment (PostgreSQL SSL mode and load_dotenv override configured) & GROQ_API_KEY added)

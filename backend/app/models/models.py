@@ -225,6 +225,7 @@ class PlaceReview(Base):
     mood = Column(String(50), nullable=True)  # e.g., "chill", "adventure"
     lat = Column(DECIMAL(10, 8), nullable=True)
     lon = Column(DECIMAL(11, 8), nullable=True)
+    photo_url = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

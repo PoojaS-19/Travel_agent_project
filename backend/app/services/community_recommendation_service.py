@@ -106,7 +106,8 @@ class CommunityRecommendationService:
                 "distance": distance_str,
                 "lat": rec["lat"],
                 "lon": rec["lon"],
-                "category": rec.get("category", "Attraction")
+                "category": rec.get("category", "Attraction"),
+                "photo_url": rec.get("photo_url")
             })
 
         return formatted_recs

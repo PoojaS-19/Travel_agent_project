@@ -1210,8 +1210,11 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {communitySuggestions.map((suggestion, index) => (
-              <div key={index} className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-5 flex flex-col justify-between shadow-sm transition-all">
-                <div>
+              <div key={index} className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl overflow-hidden flex flex-col justify-between shadow-sm transition-all">
+                {suggestion.photo_url && (
+                  <img src={suggestion.photo_url} alt={suggestion.place_name} className="w-full h-32 object-cover border-b border-slate-200" />
+                )}
+                <div className="p-5">
                   <div className="flex justify-between items-start">
                     <h4 className="text-base font-bold text-slate-900">{suggestion.place_name}</h4>
                     <span className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-2 py-0.5 rounded-md">
@@ -1220,13 +1223,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed my-3">{suggestion.reason}</p>
                   <p className="text-[11px] text-slate-400 font-bold">Distance: {suggestion.distance}</p>
+                  <button 
+                    onClick={() => addToItinerary(suggestion)}
+                    className="w-full mt-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold border border-emerald-200 transition-all cursor-pointer border-none"
+                  >
+                    Add To Itinerary
+                  </button>
                 </div>
-                <button 
-                  onClick={() => addToItinerary(suggestion)}
-                  className="w-full mt-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold border border-emerald-200 transition-all cursor-pointer border-none"
-                >
-                  Add To Itinerary
-                </button>
               </div>
             ))}
           </div>

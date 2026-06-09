@@ -21,6 +21,7 @@ class ReviewCreate(BaseModel):
     mood: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    photo_url: Optional[str] = None
 
 
 class CommunityRecommendationRequest(BaseModel):
@@ -78,6 +79,7 @@ def get_reviews_by_destination(
                     "mood": r.mood,
                     "lat": float(r.lat) if r.lat else None,
                     "lon": float(r.lon) if r.lon else None,
+                    "photo_url": r.photo_url,
                     "created_at": r.created_at.isoformat()
                 }
                 for r in reviews

@@ -23,7 +23,8 @@ class ReviewService:
             trip_type=review_data.get("trip_type"),
             mood=review_data.get("mood"),
             lat=review_data.get("lat"),
-            lon=review_data.get("lon")
+            lon=review_data.get("lon"),
+            photo_url=review_data.get("photo_url")
         )
         db.add(review)
         db.commit()
@@ -45,7 +46,8 @@ class ReviewService:
             func.count(PlaceReview.id).label('review_count'),
             func.avg(PlaceReview.lat).label('lat'),
             func.avg(PlaceReview.lon).label('lon'),
-            func.max(PlaceReview.category).label('category')
+            func.max(PlaceReview.category).label('category'),
+            func.max(PlaceReview.photo_url).label('photo_url')
         ).filter(
             PlaceReview.destination == destination
         ).group_by(
@@ -64,7 +66,8 @@ class ReviewService:
                 "review_count": row.review_count,
                 "lat": float(row.lat) if row.lat else None,
                 "lon": float(row.lon) if row.lon else None,
-                "category": row.category
+                "category": row.category,
+                "photo_url": row.photo_url
             }
             for row in result
         ]

@@ -41,6 +41,7 @@ from app.models.collaboration_schemas import (
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.routers.auth import get_current_user_id
 from app.services.auth_service import AuthService
+import asyncio
 from app.services.collaboration_service import CollaborationService
 from app.websocket_manager import trip_ws_manager
 from app.models.collaboration import TripNotification, CollaboratorRole, TripChatMessage
@@ -732,9 +733,29 @@ async def mark_destination_completed(
         "timestamp": db_msg.created_at.isoformat() + "Z"
     }
     await trip_ws_manager.broadcast(trip_id, "chat_message", ws_payload)
+    await asyncio.sleep(0.1)
 
     # Broadcast progress update to reload itinerary UI
+    print(f"BROADCASTING itinerary_progress_updated to trip {trip_id}")
     await trip_ws_manager.broadcast(trip_id, "itinerary_progress_updated", {})
+    await asyncio.sleep(0.1)
+
+    # Trigger Expense Prompt for all members to log what they spent here
+    print(f"BROADCASTING ask_expense for place {place_name} to trip {trip_id}")
+    await trip_ws_manager.broadcast(trip_id, "ask_expense", {
+        "event": "ask_expense",
+        "place_name": place_name,
+        "trip_id": trip_id
+    })
+    await asyncio.sleep(0.1)
+
+    # Trigger Review Prompt for members to rate and add photos
+    print(f"BROADCASTING ask_review for place {place_name} to trip {trip_id}")
+    await trip_ws_manager.broadcast(trip_id, "ask_review", {
+        "event": "ask_review",
+        "place_name": place_name,
+        "trip_id": trip_id
+    })
 
     return {"message": "Destination completed successfully", "daily_plans": daily_plans}
 

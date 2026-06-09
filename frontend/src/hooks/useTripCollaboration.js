@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { flushSync } from "react-dom";
 import api, { API_BASE_URL } from "../api";
 
 export default function useTripCollaboration(tripId) {
@@ -11,6 +12,7 @@ export default function useTripCollaboration(tripId) {
   const [leaderLocation, setLeaderLocation] = useState(null);
   const [memberLocations, setMemberLocations] = useState([]);
   const [expensePromptPlace, setExpensePromptPlace] = useState(null);
+  const [reviewPromptPlace, setReviewPromptPlace] = useState(null);
   const [itinerary, setItinerary] = useState(null);
 
   // Chat features states
@@ -127,6 +129,7 @@ export default function useTripCollaboration(tripId) {
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data);
       const payload = message.payload || message;
+      console.log("WS Event received:", message.event, payload);
       if (message.event === "leader_location_updated") {
         setLeaderLocation({ lat: payload.lat, lon: payload.lon });
         loadMemberLocations();
@@ -135,7 +138,17 @@ export default function useTripCollaboration(tripId) {
       } else if (message.event === "expense_updated") {
         loadExpenses();
       } else if (message.event === "ask_expense") {
-        setExpensePromptPlace(payload.place_name);
+        console.log("TRIGGERING ask_expense flushSync for", payload.place_name);
+        flushSync(() => {
+          console.log("Setting expensePromptPlace to", payload.place_name);
+          setExpensePromptPlace(payload.place_name);
+        });
+      } else if (message.event === "ask_review") {
+        console.log("TRIGGERING ask_review flushSync for", payload.place_name);
+        flushSync(() => {
+          console.log("Setting reviewPromptPlace to", payload.place_name);
+          setReviewPromptPlace(payload.place_name);
+        });
       } else if (message.event === "presence") {
         loadMemberLocations();
       } else if (message.event === "chat_message") {
@@ -179,7 +192,9 @@ export default function useTripCollaboration(tripId) {
     };
 
     return () => {
-      socket.close();
+      if (socket.readyState === 1) { // OPEN
+        socket.close();
+      }
       socketRef.current = null;
     };
   }, [tripId, loadAll, loadExpenses, loadMemberLocations]);
@@ -368,6 +383,8 @@ export default function useTripCollaboration(tripId) {
     memberLocations,
     expensePromptPlace,
     setExpensePromptPlace,
+    reviewPromptPlace,
+    setReviewPromptPlace,
     itinerary,
     loading,
     error,
