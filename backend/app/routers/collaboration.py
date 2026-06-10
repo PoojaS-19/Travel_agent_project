@@ -37,6 +37,10 @@ from app.models.collaboration_schemas import (
     ChatMessageCreate,
     ChatMessageResponse,
     ProgressionRequest,
+    GenerateCodeRequest,
+    GenerateCodeResponse,
+    AcceptCodeRequest,
+    AcceptCodeResponse,
 )
 from app.repositories.collaboration_repository import CollaborationRepository
 from app.routers.auth import get_current_user_id
@@ -116,6 +120,28 @@ async def accept_invite_otp(payload: InvitationOTPAcceptRequest, db: Session = D
     response = service.serialize_collaborator(collaborator)
     await trip_ws_manager.broadcast(collaborator.trip_id, "member_joined", jsonable_encoder(response))
     return InvitationAcceptResponse(trip_id=collaborator.trip_id, collaborator=response, message="Invitation accepted")
+
+
+@router.post("/collaboration/invitations/generate-code", response_model=GenerateCodeResponse)
+def generate_invite_code(payload: GenerateCodeRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    code_record = service.generate_invite_code(payload.trip_id, user_id)
+    return GenerateCodeResponse(
+        invite_code=code_record.invite_code,
+        expires_at=code_record.expires_at
+    )
+
+
+@router.post("/collaboration/invitations/accept-code", response_model=AcceptCodeResponse)
+async def accept_invite_code(payload: AcceptCodeRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    service = CollaborationService(db)
+    collaborator = service.accept_invite_code(payload.invite_code, user_id)
+    response = service.serialize_collaborator(collaborator)
+    await trip_ws_manager.broadcast(collaborator.trip_id, "member_joined", jsonable_encoder(response))
+    return AcceptCodeResponse(
+        success=True,
+        trip_id=collaborator.trip_id
+    )
 
 
 @router.patch("/trips/{trip_id}/collaboration/members/{collaborator_id}", response_model=dict)

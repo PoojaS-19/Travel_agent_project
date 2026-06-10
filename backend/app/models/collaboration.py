@@ -304,3 +304,18 @@ class TripChatMessage(Base):
     )
 
 
+class TripInviteCode(Base):
+    __tablename__ = "trip_invite_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    invite_code = Column(String(6), unique=True, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    trip = relationship("Itinerary")
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+

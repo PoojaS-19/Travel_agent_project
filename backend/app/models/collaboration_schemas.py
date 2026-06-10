@@ -290,3 +290,22 @@ class ChatMessageResponse(BaseModel):
 class ProgressionRequest(BaseModel):
     place_name: str
 
+
+class GenerateCodeRequest(BaseModel):
+    trip_id: int
+
+
+class GenerateCodeResponse(BaseModel):
+    invite_code: str
+    expires_at: datetime
+
+
+class AcceptCodeRequest(BaseModel):
+    invite_code: str = Field(..., min_length=6, max_length=6)
+
+
+class AcceptCodeResponse(BaseModel):
+    success: bool
+    trip_id: int
+
+

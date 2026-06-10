@@ -73,6 +73,34 @@ export default function SavedTripsPage() {
     }
   };
 
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCodeError, setInviteCodeError] = useState("");
+  const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
+
+  const handleJoinTripWithCode = async () => {
+    if (inviteCode.length !== 6) {
+      setInviteCodeError("Please enter a 6-digit invite code.");
+      return;
+    }
+    setInviteCodeError("");
+    setInviteCodeLoading(true);
+    try {
+      const response = await API.post("/api/collaboration/invitations/accept-code", {
+        invite_code: inviteCode
+      });
+      const tripId = response.data.trip_id;
+      setMessage("Joined trip successfully!");
+      setInviteCode("");
+      await fetchTrips();
+      navigate(`/collaborate/${tripId}`);
+    } catch (err) {
+      console.error(err);
+      setInviteCodeError(err.response?.data?.detail || "Could not verify invite code.");
+    } finally {
+      setInviteCodeLoading(false);
+    }
+  };
+
   const fetchTrips = async () => {
     setLoading(true);
     setError("");
@@ -261,6 +289,30 @@ export default function SavedTripsPage() {
               </button>
             </div>
             {otpError && <p style={{ color: "#ef4444", fontSize: "11px", margin: "4px 0 0 0" }}>{otpError}</p>}
+          </div>
+
+          <div className="join-trip-code-card" style={{ marginBottom: "20px", padding: "12px", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(255,255,255,0.05)" }}>
+            <h4 style={{ margin: "0 0 8px 0", fontSize: "14px" }}>Join With Invite Code</h4>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                placeholder="6-digit Code"
+                maxLength={6}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.replace(/\D/g, ""))}
+                style={{ flex: 1, padding: "6px 10px", fontSize: "13px", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white" }}
+              />
+              <button
+                type="button"
+                onClick={handleJoinTripWithCode}
+                disabled={inviteCodeLoading}
+                className="saved-trip-primary-btn"
+                style={{ padding: "6px 12px", fontSize: "13px", backgroundColor: "#10b981", border: "none" }}
+              >
+                {inviteCodeLoading ? "Joining..." : "Join"}
+              </button>
+            </div>
+            {inviteCodeError && <p style={{ color: "#ef4444", fontSize: "11px", margin: "4px 0 0 0" }}>{inviteCodeError}</p>}
           </div>
 
           {loading ? (

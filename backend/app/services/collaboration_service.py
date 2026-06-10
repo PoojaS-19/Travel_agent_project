@@ -28,6 +28,7 @@ from app.models.collaboration import (
     LeaderLocation,
     MemberLocation,
     TripChatMessage,
+    TripInviteCode,
 )
 from app.models.collaboration_schemas import (
     CollaboratorResponse,
@@ -1011,3 +1012,90 @@ class CollaborationService:
             "expenses": serialized_expenses,
             "splits": splits
         }
+
+    def generate_invite_code(self, trip_id: int, user_id: int) -> TripInviteCode:
+        # Enforce that only trip owners/editors can generate codes
+        self.require_editor(trip_id, user_id)
+        
+        # Verify trip exists
+        trip = self.repo.get_trip(trip_id)
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found")
+
+        # Invalidate/remove previous active codes for this trip
+        self.db.query(TripInviteCode).filter(TripInviteCode.trip_id == trip_id).delete()
+        
+        # Generate a unique 6-digit numeric code
+        import random
+        for _ in range(10):  # Retry up to 10 times to find a unique code
+            code = f"{random.randint(100000, 999999)}"
+            existing = self.db.query(TripInviteCode).filter(TripInviteCode.invite_code == code).first()
+            if not existing:
+                break
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not generate a unique invite code"
+            )
+            
+        expires_at = datetime.utcnow() + timedelta(hours=24)
+        
+        invite_code_record = TripInviteCode(
+            trip_id=trip_id,
+            invite_code=code,
+            created_by=user_id,
+            created_at=datetime.utcnow(),
+            expires_at=expires_at
+        )
+        self.db.add(invite_code_record)
+        self.db.commit()
+        self.db.refresh(invite_code_record)
+        return invite_code_record
+
+    def accept_invite_code(self, invite_code: str, user_id: int) -> TripCollaborator:
+        # Validate code exists
+        record = self.db.query(TripInviteCode).filter(TripInviteCode.invite_code == invite_code).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Invalid invite code")
+            
+        # Validate code is not expired
+        if record.expires_at <= datetime.utcnow():
+            raise HTTPException(status_code=410, detail="Invite code has expired")
+            
+        # Verify user exists / authenticated
+        user = self.repo.get_user(user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+            
+        # Verify trip exists
+        trip = self.repo.get_trip(record.trip_id)
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found")
+            
+        # Prevent duplicate collaborator entries (and error if already joined)
+        collaborator = self.repo.get_collaborator(record.trip_id, user_id)
+        if collaborator:
+            raise HTTPException(status_code=409, detail="You are already a collaborator on this trip")
+            
+        collaborator = TripCollaborator(
+            trip_id=record.trip_id,
+            user_id=user_id,
+            role=CollaboratorRole.EDITOR,
+            invited_by_user_id=record.created_by,
+            joined_at=datetime.utcnow()
+        )
+        self.db.add(collaborator)
+        self.db.flush()
+        
+        # Notify trip owner
+        self.notify_trip_owner(
+            record.trip_id,
+            user_id,
+            NotificationType.INVITE_ACCEPTED,
+            "Invite code accepted",
+            f"{user.username} joined your trip using invite code."
+        )
+            
+        self.db.commit()
+        self.db.refresh(collaborator)
+        return collaborator

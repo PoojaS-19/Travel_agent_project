@@ -151,6 +151,31 @@ export default function CollaborationDashboard() {
       setSuccessToast("");
     }, 3000);
   };
+
+  const [inviteCodeModalOpen, setInviteCodeModalOpen] = useState(false);
+  const [generatedInviteCode, setGeneratedInviteCode] = useState("");
+  const [inviteCodeExpiresAt, setInviteCodeExpiresAt] = useState("");
+  const [generateCodeLoading, setGenerateCodeLoading] = useState(false);
+  const [generateCodeError, setGenerateCodeError] = useState("");
+
+  const handleGenerateInviteCode = async () => {
+    setGenerateCodeLoading(true);
+    setGenerateCodeError("");
+    try {
+      const response = await api.post("/api/collaboration/invitations/generate-code", {
+        trip_id: Number(tripId)
+      });
+      setGeneratedInviteCode(response.data.invite_code);
+      setInviteCodeExpiresAt(response.data.expires_at);
+      setInviteCodeModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      setGenerateCodeError(err.response?.data?.detail || "Failed to generate invite code.");
+      alert(err.response?.data?.detail || "Failed to generate invite code.");
+    } finally {
+      setGenerateCodeLoading(false);
+    }
+  };
   const {
     dashboard,
     suggestions,
@@ -938,6 +963,83 @@ export default function CollaborationDashboard() {
     <main className="collab-page">
       <InviteMembersModal open={inviteOpen} onClose={() => setInviteOpen(false)} onInvite={actions.inviteMembers} />
 
+      {/* Invite Code Modal */}
+      {inviteCodeModalOpen && (
+        <div className="collab-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="collab-modal" style={{ border: "2px solid #10b981", maxWidth: "450px" }}>
+            <div className="collab-modal-header">
+              <h2>🔑 Trip Invite Code</h2>
+              <button className="icon-button" onClick={() => setInviteCodeModalOpen(false)}>×</button>
+            </div>
+            <div style={{ textAlign: "center", margin: "20px 0" }}>
+              <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "8px" }}>Share this code with your buddies to let them join the trip:</p>
+              <div style={{
+                fontSize: "36px",
+                fontWeight: "800",
+                letterSpacing: "4px",
+                color: "#10b981",
+                background: "#f0fdf4",
+                padding: "12px 24px",
+                borderRadius: "12px",
+                border: "2px dashed #10b981",
+                display: "inline-block",
+                margin: "10px 0"
+              }}>
+                {generatedInviteCode}
+              </div>
+              <p style={{ fontSize: "12px", color: "#94a3b8", marginTop: "8px" }}>
+                Expires on: {inviteCodeExpiresAt ? new Date(inviteCodeExpiresAt).toLocaleString() : "..."} (valid for 24h)
+              </p>
+            </div>
+            
+            <div className="collab-modal-actions" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedInviteCode);
+                    setSuccessToast("Invite code copied to clipboard!");
+                    setTimeout(() => setSuccessToast(""), 3000);
+                  }}
+                  className="saved-trip-primary-btn"
+                  style={{ flex: 1, background: "#10b981", borderColor: "#059669" }}
+                >
+                  Copy Code
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateInviteCode}
+                  disabled={generateCodeLoading}
+                  className="saved-trip-secondary-btn"
+                  style={{ flex: 1 }}
+                >
+                  {generateCodeLoading ? "Regenerating..." : "Regenerate"}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const msg = `Join my trip on TravelTrip using this invite code: ${generatedInviteCode}`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+                }}
+                className="saved-trip-primary-btn"
+                style={{ width: "100%", background: "#25d366", borderColor: "#128c7e", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+              >
+                Share on WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteCodeModalOpen(false)}
+                className="saved-trip-secondary-btn"
+                style={{ width: "100%", background: "#64748b", color: "white" }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Real-time Proximity Expense Prompt Modal */}
       {expensePromptPlace && (
         <div className="collab-modal-backdrop" style={{ zIndex: 9999 }}>
@@ -1035,6 +1137,9 @@ export default function CollaborationDashboard() {
         </div>
         <div className="hero-actions">
           <button onClick={() => setInviteOpen(true)} disabled={!isOwner}>Invite Buddies</button>
+          <button onClick={handleGenerateInviteCode} disabled={!canEdit} style={{ background: "#10b981", borderColor: "#059669" }}>
+            Generate Invite Code
+          </button>
           {isOwner && (
             <>
               <button onClick={() => setShowFollowersCard(true)} style={{ background: "#10b981" }}>Link Followers</button>

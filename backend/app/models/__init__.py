@@ -32,6 +32,7 @@ from app.models.collaboration import (
     LeaderLocation,
     MemberLocation,
     TripChatMessage,
+    TripInviteCode,
 )
 from app.models.location import (
     LiveLocation,
@@ -71,6 +72,7 @@ __all__ = [
     "LeaderLocation",
     "MemberLocation",
     "TripChatMessage",
+    "TripInviteCode",
     "LiveLocation",
     "LocationHistory",
     "SOSAlert",
