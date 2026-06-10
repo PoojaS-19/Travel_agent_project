@@ -14,9 +14,10 @@ import FloatingChatbot from "./components/FloatingChatbot";
 import ProtectedRoute from "./components/ProtectedRoute";
 import TrainSearchPage from "./pages/TrainSearchPage";
 import BusSearchPage from "./pages/BusSearchPage";
+import DashboardPage from "./pages/DashboardPage";
 import { useState, useEffect } from "react";
 import MainHome from "./pages/MainHome";
-import { Menu, X, Compass, LogOut, User, Globe, Heart, Plane, Bed, Utensils, Navigation, Train, Bus } from "lucide-react";
+import { Menu, X, Compass, LogOut, User, Globe, Heart, Plane, Bed, Utensils, Navigation, Train, Bus, LayoutDashboard } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function NavigationBar({ language, setLanguage, user, handleLogout }) {
@@ -25,6 +26,7 @@ function NavigationBar({ language, setLanguage, user, handleLogout }) {
 
   const links = [
     { to: "/", label: "Home", icon: Compass },
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/itinerary", label: "Itinerary", icon: Navigation },
     { to: "/saved-trips", label: "Saved Trips", icon: Heart },
     { to: "/hotels", label: "Hotels", icon: Bed },
@@ -269,6 +271,7 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             
             {/* Protected Feature Routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/saved-trips" element={<ProtectedRoute><SavedTripsPage /></ProtectedRoute>} />
             <Route path="/collaborate" element={<ProtectedRoute><CollaborationDashboard /></ProtectedRoute>} />
             <Route path="/collaborate/:tripId" element={<ProtectedRoute><CollaborationDashboard /></ProtectedRoute>} />

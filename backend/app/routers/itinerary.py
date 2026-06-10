@@ -51,7 +51,7 @@ def inject_real_coordinates(daily_plans, destination, route_polyline=None, route
             activities.extend(day["activities"])
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        executor.map(fetch_coords, activities)
+        list(executor.map(fetch_coords, activities))
 
     if route_polyline and route_data:
         for day in daily_plans:
@@ -213,7 +213,7 @@ class IncidentRequest(BaseModel):
 # --- Endpoints ---
 
 @router.post("/itinerary")
-async def generate_itinerary(
+def generate_itinerary(
     details: dict,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -250,7 +250,7 @@ async def generate_itinerary(
         route_data = None
         route_polyline = None
         route_context = ""
-        if start_city and destination and start_city.lower() != destination.lower() and start_city.lower() != "your current location":
+        if start_city and destination and start_city.lower() != destination.lower() and start_city.lower() not in ["your current location", "current location"]:
             try:
                 route_data = get_directions(start_city, destination, strategy=route_strategy)
                 if route_data:
@@ -359,7 +359,9 @@ Now generate the JSON for the user's inputs.
         prompt_days = "The trip days (for your reference):\n" + "\n".join(day_headers) + "\n\nNow produce the JSON:\n\n"
         final_prompt = prompt_header + prompt_days
 
+        print(">>> Calling Groq API...")
         generated_content = get_groq_response(final_prompt)
+        print(">>> Groq API returned")
 
         try:
             clean_content = generated_content.strip()
@@ -372,8 +374,10 @@ Now generate the JSON for the user's inputs.
             
             data = repair_json(clean_content, return_objects=True)
             if isinstance(data, dict) and "daily_plans" in data:
+                print(">>> Normalizing and injecting coordinates...")
                 data["daily_plans"] = normalize_daily_plans(data["daily_plans"])
                 data["daily_plans"] = inject_real_coordinates(data["daily_plans"], destination, route_polyline, route_data, start_city)
+                print(">>> Coordinate injection complete")
 
             itinerary_id = None
             if user_id and isinstance(data, dict) and data.get("itinerary_text") and data.get("daily_plans"):
@@ -518,7 +522,7 @@ async def get_recommendations(
         return {"error": str(e), "recommendations": RecommendationService.generic_recommendations(language)}
 
 @router.post("/chatbot")
-async def travel_chatbot(
+def travel_chatbot(
     data: dict,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -894,3 +898,5 @@ The JSON structure must be exactly:
             "itinerary_text": itinerary_text + f"\n📍 Continue your relaxing journey in {req.destination}.",
             "daily_plans": []
         }
+# trigger reload
+# trigger reload 2

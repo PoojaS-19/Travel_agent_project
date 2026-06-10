@@ -20,6 +20,7 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 # Create engine
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
+    connect_args={"sslmode": "require"} if "render.com" in SQLALCHEMY_DATABASE_URL else {},
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
     pool_pre_ping=True,
     pool_recycle=280,

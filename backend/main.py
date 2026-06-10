@@ -35,66 +35,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Create database tables and execute dynamic schema updates on startup."""
+    print(">>> Startup event started", flush=True)
     try:
+        print(">>> Calling Base.metadata.create_all()", flush=True)
         Base.metadata.create_all(bind=engine)
-        print("Database tables created/verified successfully")
-        
-        # Run dynamic migrations to ensure schema compatibility
-        # Check and add otp_code column to trip_invitations if missing
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN otp_code VARCHAR(6)"))
-                print("Dynamic migration: Added 'otp_code' column to 'trip_invitations'")
-        except Exception as otp_error:
-            # Column might already exist
-            pass
-
-        # Check and add token column to trip_invitations if missing
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE trip_invitations ADD COLUMN token VARCHAR(255)"))
-                print("Dynamic migration: Added 'token' column to 'trip_invitations'")
-        except Exception as token_error:
-            # Column might already exist
-            pass
-
-        # Check and add route_polyline column to itineraries if missing
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE itineraries ADD COLUMN route_polyline JSON"))
-                print("Dynamic migration: Added 'route_polyline' column to 'itineraries'")
-        except Exception:
-            pass
-
-        # Ensure 'FOLLOWER' is added to 'collaboratorrole' type if using PostgreSQL
-        try:
-            if engine.dialect.name == "postgresql":
-                with engine.connect() as conn:
-                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-                    conn.execute(text("ALTER TYPE collaboratorrole ADD VALUE IF NOT EXISTS 'FOLLOWER'"))
-                    print("Dynamic migration: Added 'FOLLOWER' to 'collaboratorrole' enum successfully")
-        except Exception as enum_error:
-            print(f"Warning: Could not add FOLLOWER to collaboratorrole enum: {enum_error}")
-
-        # Ensure itinerary_text in itineraries is of type TEXT (for long AI generated content)
-        try:
-            with engine.begin() as conn:
-                if engine.dialect.name == "postgresql":
-                    conn.execute(text("ALTER TABLE itineraries ALTER COLUMN itinerary_text TYPE TEXT"))
-                    print("Dynamic migration: Altered 'itinerary_text' column to TYPE TEXT")
-        except Exception as migration_error:
-            print(f"Warning: Could not run dynamic migration for itinerary_text: {migration_error}")
-            
-        # Add photo_url to place_reviews
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE place_reviews ADD COLUMN photo_url VARCHAR(1000)"))
-                print("Dynamic migration: Added 'photo_url' column to 'place_reviews'")
-        except Exception:
-            pass
-                
+        print("Database tables created/verified successfully", flush=True)
+        # Removed dynamic migrations to prevent Postgres deadlocks on startup.
     except Exception as e:
-        print(f"Warning: Could not run startup database validation/migrations: {e}")
+        print(f"Warning: Could not run startup database validation: {e}", flush=True)
 
 # --- Root Endpoint ---
 @app.get("/")

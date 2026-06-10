@@ -10,7 +10,7 @@ import html2pdf from "html2pdf.js";
 import { 
   Sparkles, MapPin, Calendar, FileText, Check, Copy, Download, 
   Plus, X, Star, Navigation, Heart, ChevronLeft, ChevronRight, Info,
-  ChevronDown
+  ChevronDown, Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -48,8 +48,19 @@ function CityAutocomplete({ placeholder, value, onChange }) {
           className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-brand-secondary focus:border-transparent outline-none transition-all text-sm"
         />
       </div>
-      {showSuggestions && value.length > 0 && (
+      {showSuggestions && (
         <div className="absolute left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto">
+          {value.length === 0 && (
+             <div
+               className="px-4 py-3 hover:bg-slate-50 text-brand-primary cursor-pointer transition-colors text-sm font-semibold border-b border-slate-100 flex items-center gap-2"
+               onClick={() => {
+                 onChange("Current Location");
+                 setShowSuggestions(false);
+               }}
+             >
+               <Navigation className="w-4 h-4" /> Use Current Location
+             </div>
+          )}
           {filteredCities.length > 0 ? (
             filteredCities.map((c, i) => (
               <div
@@ -63,11 +74,16 @@ function CityAutocomplete({ placeholder, value, onChange }) {
                 {c.name}
               </div>
             ))
-          ) : (
-            <div className="px-4 py-3 text-slate-400 text-sm cursor-default">
-              No cities found
-            </div>
-          )}
+          ) : value.length > 0 ? (
+             <div
+               className="px-4 py-3 hover:bg-slate-50 text-slate-700 hover:text-slate-900 cursor-pointer transition-colors text-sm font-semibold border-b border-slate-100 last:border-none"
+               onClick={() => {
+                 setShowSuggestions(false);
+               }}
+             >
+               Use "{value}"
+             </div>
+          ) : null}
         </div>
       )}
     </div>
@@ -1038,7 +1054,7 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
                 className="flex items-center gap-2 px-5 py-2.5 bg-brand-secondary hover:bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-200 border-none cursor-pointer"
               >
                 <Navigation className="w-4 h-4" />
-                Collaborative Dashboard
+                Live Collaboration
               </button>
               <button 
                 onClick={handleFinalizeItinerary} 
@@ -1046,6 +1062,13 @@ export default function ItineraryPage({ language, chatItinerary, chatDailyPlans 
               >
                 <Plus className="w-4 h-4" />
                 Add Travel Buddies
+              </button>
+              <button 
+                onClick={() => navigate('/dashboard')} 
+                className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-200 border-none cursor-pointer"
+              >
+                <Activity className="w-4 h-4" />
+                Analytics Dashboard
               </button>
             </>
           )}
