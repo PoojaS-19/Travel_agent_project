@@ -27,6 +27,13 @@ class EmailService:
 
     @classmethod
     def is_configured(cls) -> bool:
+        if os.getenv("SMTP_SERVER"):
+            return bool(
+                os.getenv("SMTP_SERVER") and
+                os.getenv("SMTP_USERNAME") and
+                os.getenv("SMTP_PASSWORD") and
+                os.getenv("SMTP_FROM")
+            )
         if cls.EMAIL_PROVIDER == "resend":
             return bool(cls.RESEND_API_KEY)
         return bool(cls.SMTP_HOST and cls.SMTP_USERNAME and cls.SMTP_PASSWORD)
@@ -38,7 +45,33 @@ class EmailService:
             print(text_body or html_body)
             return EmailDeliveryResult(sent=False, error="Email is not configured. Use the invite link below or configure SMTP/Resend.")
 
-        if cls.EMAIL_PROVIDER == "resend":
+        if os.getenv("SMTP_SERVER"):
+            print("Using Brevo SMTP provider")
+            smtp_server = os.getenv("SMTP_SERVER")
+            smtp_port = int(os.getenv("SMTP_PORT", "587"))
+            smtp_username = os.getenv("SMTP_USERNAME")
+            smtp_password = os.getenv("SMTP_PASSWORD")
+            smtp_from = os.getenv("SMTP_FROM")
+
+            message = EmailMessage()
+            message["From"] = smtp_from
+            message["To"] = to_email
+            message["Subject"] = subject
+            message.set_content(text_body or unescape(html_body))
+            message.add_alternative(html_body, subtype="html")
+
+            try:
+                with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as smtp:
+                    smtp.starttls()
+                    smtp.login(smtp_username, smtp_password)
+                    smtp.send_message(message)
+                print(f"[email:success] provider=brevo_smtp to={to_email} subject={subject}")
+                return EmailDeliveryResult(sent=True)
+            except Exception as exc:
+                print(f"[email:failed] provider=brevo_smtp to={to_email} subject={subject} error={exc}")
+                return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
+
+        elif cls.EMAIL_PROVIDER == "resend":
             print(f"[email:provider-selected] provider=resend to={to_email} subject={subject}")
             try:
                 headers = {
@@ -73,6 +106,7 @@ class EmailService:
                 return EmailDeliveryResult(sent=False, error=f"Email delivery failed: {exc}")
 
         else:
+            print("Using local SMTP provider")
             print(f"[email:provider-selected] provider=smtp to={to_email} subject={subject}")
             message = EmailMessage()
             message["From"] = cls.FROM_EMAIL
